@@ -193,8 +193,19 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
       <div class="fi"><label>Semester</label><input type="text" id="sub-sem" placeholder="e.g. Fifth Semester"></div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hdr"><span>🎯</span><div class="card-title">CO Statements <span style="font-weight:400;color:var(--steel)">(Auto-detected from documents)</span></div></div>
+    <div id="co-stmt-grid" class="fg">
+      <div class="fi full" style="color:var(--steel);font-size:12px;padding:6px 0">Upload and process files — CO statements will be auto-detected and appear here for editing.</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hdr"><span>📚</span><div class="card-title">Unit Topics / Titles <span style="font-weight:400;color:var(--steel)">(Auto-detected from syllabus lines)</span></div></div>
+    <div id="unit-topic-grid" class="fg">
+      <div class="fi full" style="color:var(--steel);font-size:12px;padding:6px 0">Upload and process files — unit topic titles will be auto-detected and appear here for editing.</div>
+    </div>
+  </div>
   <div class="upload-grid">
-    <div class="uz" id="uz-ct" ondragover="dov(event,'ct')" ondragleave="dol('ct')" ondrop="ddr(event,'ct')">
       <input type="file" multiple accept=".docx" onchange="fsel(event,'ct')">
       <div class="zi">🔄</div><h3>Cycle Test Papers</h3><p>Internal Assessment / Quiz (N files)</p>
       <div class="pbar" id="pb-ct" style="display:none"><div class="pfill" id="pf-ct" style="width:0%"></div></div>
@@ -344,9 +355,11 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
 // ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
-const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:''}};
+const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}}};
 let mImgs=[];
-const UN={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+// Default unit topic names — overwritten by auto-detected values from uploaded docs
+const UN_DEFAULT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+function getUN(u){return DB.sub.unit_topics[String(u)]||UN_DEFAULT[u]||'Unit '+u;}
 const COU={'CO1':'1','CO2':'2','CO3':'3','CO4':'4','CO5':'5'};
 
 // ═══════════════════════════════════════
@@ -500,10 +513,10 @@ function detectType(marks,paras){
 }
 
 function detectSubject(xmlDoc){
-  const info={subject:'',code:'',dept:'ECE',semester:''};
+  const info={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}};
   const texts=[];
   xmlDoc.querySelectorAll('*').forEach(el=>{if(el.localName==='t'){const t=(el.textContent||'').trim();if(t.length>2)texts.push(t);}});
-  const uniq=[...new Set(texts)].slice(0,120);
+  const uniq=[...new Set(texts)].slice(0,200);
   for(const t of uniq){
     if(!info.code){const cm=t.match(/[A-Z]{2,4}\d{3}/);if(cm)info.code=cm[0];}
     if(!info.subject&&/Digital VLSI/i.test(t))info.subject='Digital VLSI Design and Technology';
@@ -513,6 +526,40 @@ function detectSubject(xmlDoc){
     if(!info.subject&&t.length>25&&/Design|Technology|Circuit|Signal|Network|Electron/i.test(t)&&!/Exam|Assessment|Semester|Dept|Regulation|Internal|Answer/i.test(t))info.subject=t.slice(0,80);
   }
   if(!info.subject)info.subject='Unknown Subject';
+
+  // ── Extract CO Statements ──────────────────────────────────
+  // Scan raw text lines (not deduped) for CO label + next line = statement
+  const rawTexts=[];
+  xmlDoc.querySelectorAll('*').forEach(el=>{if(el.localName==='t'){const t=(el.textContent||'').trim();if(t)rawTexts.push(t);}});
+  const allLines=rawTexts.slice(0,300);
+  for(let i=0;i<allLines.length;i++){
+    const line=allLines[i];
+    // Bare CO label: "CO1", "CO 2"
+    const bare=line.match(/^CO\s*([1-5])\s*$/i);
+    if(bare){
+      const key='CO'+bare[1];
+      if(!info.co_statements[key]){
+        let j=i+1;
+        while(j<allLines.length&&!allLines[j].trim())j++;
+        if(j<allLines.length){
+          const stmt=allLines[j].trim();
+          if(!/^CO\s*[1-5]\s*$/i.test(stmt)&&stmt.length>5){
+            info.co_statements[key]=stmt;
+            i=j;continue;
+          }
+        }
+      }
+    }
+    // Inline: "CO1: statement" or "CO1 – statement"
+    const inl=line.match(/^CO\s*([1-5])\s*[:\u2013\-]\s*(.+)/i);
+    if(inl){const key='CO'+inl[1];if(!info.co_statements[key])info.co_statements[key]=inl[2].trim();}
+    // Unit topic: "Syllabus: Unit -1 Sequential Circuit Design"
+    const syl=line.match(/Syllabus:\s*Unit\s*[-\u2013]?\s*([1-5])\s+(.+)/i);
+    if(syl&&!info.unit_topics[syl[1]])info.unit_topics[syl[1]]=syl[2].trim();
+    // Unit topic: "Unit -1: Title" or "Unit–1 – Title"
+    const utop=line.match(/^Unit\s*[-\u2013]?\s*([1-5])\s*[:\u2013\-|]\s*(.+)/i);
+    if(utop&&!info.unit_topics[utop[1]])info.unit_topics[utop[1]]=utop[2].trim();
+  }
   return info;
 }
 
@@ -665,6 +712,9 @@ async function processAll(){
       try{
         const{qs,subInfo}=await parseDocx(f,cat);
         if(!DB.sub.subject&&subInfo.subject){DB.sub=subInfo;updateSubjectFields(subInfo);}
+        // Merge co_statements and unit_topics (don't overwrite existing keys)
+        if(subInfo.co_statements){Object.entries(subInfo.co_statements).forEach(([k,v])=>{if(!DB.sub.co_statements[k])DB.sub.co_statements[k]=v;});}
+        if(subInfo.unit_topics){Object.entries(subInfo.unit_topics).forEach(([k,v])=>{if(!DB.sub.unit_topics[k])DB.sub.unit_topics[k]=v;});}
         let added=0;
         qs.forEach(q=>{
           const key=q.co+'|'+q.text.slice(0,50).toLowerCase().trim();
@@ -688,15 +738,39 @@ async function processAll(){
   btn.disabled=false;btn.textContent='⚙️ Process All Files';
   document.getElementById('btn-gw').disabled=false;
   document.getElementById('hbadge-sub').textContent=(DB.sub.code||'QB')+(DB.sub.subject?' – '+DB.sub.subject.slice(0,25):'');
+  renderCoStmtFields();renderUnitTopicFields();
   updateCounts();renderAll();
   toast('Processed! '+DB.questions.length+' questions ('+totalNew+' new)','ok');
 }
 
-function updateSubjectFields(info){
+function renderCoStmtFields(){
+  const wrap=document.getElementById('co-stmt-grid');if(!wrap)return;
+  wrap.innerHTML='';
+  for(let n=1;n<=5;n++){
+    const key='CO'+n;
+    const val=DB.sub.co_statements[key]||'';
+    const row=document.createElement('div');row.className='fi full';
+    row.innerHTML=`<label>CO${n} Statement</label><input type="text" id="cos-${key}" value="${val.replace(/"/g,'&quot;')}" placeholder="Auto-detected or enter manually..." oninput="DB.sub.co_statements['${key}']=this.value;renderAll()">`;
+    wrap.appendChild(row);
+  }
+}
+function renderUnitTopicFields(){
+  const wrap=document.getElementById('unit-topic-grid');if(!wrap)return;
+  wrap.innerHTML='';
+  for(let n=1;n<=5;n++){
+    const val=DB.sub.unit_topics[String(n)]||'';
+    const def=UN_DEFAULT[n]||'';
+    const row=document.createElement('div');row.className='fi full';
+    row.innerHTML=`<label>Unit ${n} Topic</label><input type="text" id="ut-${n}" value="${val.replace(/"/g,'&quot;')}" placeholder="${def}" oninput="DB.sub.unit_topics['${n}']=this.value;renderAll()">`;
+    wrap.appendChild(row);
+  }
+}
   document.getElementById('sub-name').value=info.subject||'';
   document.getElementById('sub-code').value=info.code||'';
   document.getElementById('sub-dept').value=info.dept||'ECE';
   document.getElementById('sub-sem').value=info.semester||'';
+  renderCoStmtFields();
+  renderUnitTopicFields();
 }
 
 // ═══════════════════════════════════════
@@ -729,7 +803,7 @@ function renderSec(type){
   let html='';
   for(let u=1;u<=5;u++){
     const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)continue;
-    html+='<div class="ub"><div class="uhdr" onclick="toggleU(this)"><div class="unum">'+u+'</div><div class="utitle">Unit '+u+' \u2013 '+(UN[u]||'')+'</div><div class="umeta">'+uqs.length+' question'+(uqs.length>1?'s':'')+'</div><span class="ucaret">\u25bc</span></div><div class="ubody"><div class="tw"><table class="qb"><thead><tr><th>Q.No</th><th>CO</th><th>BTL</th><th>Question</th>'+(type==='MCQ'?'<th style="min-width:200px">Options</th>':'')+'<th>Marks</th><th>Src</th><th>Act</th></tr></thead><tbody>';
+    html+='<div class="ub"><div class="uhdr" onclick="toggleU(this)"><div class="unum">'+u+'</div><div class="utitle">Unit '+u+' \u2013 '+getUN(u)+'</div><div class="umeta">'+uqs.length+' question'+(uqs.length>1?'s':'')+'</div><span class="ucaret">\u25bc</span></div><div class="ubody"><div class="tw"><table class="qb"><thead><tr><th>Q.No</th><th>CO</th><th>BTL</th><th>Question</th>'+(type==='MCQ'?'<th style="min-width:200px">Options</th>':'')+'<th>Marks</th><th>Src</th><th>Act</th></tr></thead><tbody>';
     uqs.forEach((q,i)=>{
       const kc={'K1':'k1','K2':'k2','K3':'k3','K4':'k4','K5':'k5','K6':'k6'}[q.btl]||'k2';
       const srcPill='p-'+q.source;
@@ -755,20 +829,23 @@ function renderDash(){
   document.getElementById('dash-info').textContent=DB.sub.subject?(DB.sub.code||'')+' \u2013 '+DB.sub.subject+' | '+(DB.sub.dept||'ECE')+' | '+(DB.sub.semester||''):'Upload files to begin';
 
   if(total){
-    const T={1:'Sequential Circuits',2:'Asynchronous Sequential',3:'Testing',4:'PLD Design',5:'Digital Systems'};
     let rows='';
     for(let u=1;u<=5;u++){
       const uqs=DB.questions.filter(q=>q.unit==u);if(!uqs.length)continue;
       const bw=Math.round(uqs.length/total*100);
-      rows+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">Unit '+u+'</td><td style="color:var(--ice)">'+T[u]+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--teal)">'+uqs.filter(q=>q.type==='SA').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--purple)">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+uqs.length+'</td><td><div style="background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;height:10px"><div style="background:linear-gradient(90deg,var(--purple),var(--teal));height:100%;width:'+bw+'%"></div></div></td></tr>';
+      rows+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">Unit '+u+'</td><td style="color:var(--ice)">'+getUN(u)+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--teal)">'+uqs.filter(q=>q.type==='SA').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--purple)">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+uqs.length+'</td><td><div style="background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;height:10px"><div style="background:linear-gradient(90deg,var(--purple),var(--teal));height:100%;width:'+bw+'%"></div></div></td></tr>';
     }
     document.getElementById('unit-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>Unit</th><th>Topic</th><th style="color:var(--teal)">SA</th><th style="color:var(--gold)">MCQ</th><th style="color:var(--purple)">Part B</th><th>Total</th><th style="min-width:120px">Distribution</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 
     const KS=['K1','K2','K3','K4','K5','K6'],KC={'K1':'#40d080','K2':'#60b0f0','K3':'#f0c060','K4':'#f07060','K5':'#e060f0','K6':'#f07060'};
     let crow='';
-    for(let co=1;co<=5;co++){const cqs=DB.questions.filter(q=>q.co==='CO'+co);if(!cqs.length)continue;crow+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;'+(n?'color:'+KC[k]+';font-weight:700':'')+'">'+(n||'\u2013')+'</td>';}).join('')+'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:700">'+cqs.length+'</td></tr>';}
-    document.getElementById('co-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>CO</th>'+KS.map(k=>'<th style="color:'+KC[k]+'">'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+crow+'</tbody></table></div>';
-  }
+    for(let co=1;co<=5;co++){
+      const cqs=DB.questions.filter(q=>q.co==='CO'+co);if(!cqs.length)continue;
+      const stmt=DB.sub.co_statements['CO'+co]||'';
+      const stmtCell=stmt?`<td colspan="2" style="color:var(--steel);font-size:11px;font-style:italic;max-width:300px">${stmt}</td>`:'<td colspan="2"></td>';
+      crow+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">CO'+co+'</td>'+stmtCell+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;'+(n?'color:'+KC[k]+';font-weight:700':'')+'\">'+(n||'\u2013')+'</td>';}).join('')+'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:700">'+cqs.length+'</td></tr>';
+    }
+    document.getElementById('co-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>CO</th><th colspan="2" style="color:var(--steel)">Statement</th>'+KS.map(k=>'<th style="color:'+KC[k]+'">'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+crow+'</tbody></table></div>';
 }
 
 function updateCounts(){
@@ -844,7 +921,6 @@ async function exportWord(){
   function setP(p,m){wf.style.width=p+'%';wm.textContent=m;}
   setP(5,'Building document...');
   const sub=DB.sub;
-  const UT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
   const KS=['K1','K2','K3','K4','K5','K6'];
 
   function tableSection(title,typeKey){
@@ -852,7 +928,7 @@ async function exportWord(){
     let h='<h1 style="font-family:Arial,sans-serif;color:#1A237E;font-size:14pt;border-bottom:2pt solid #1A237E;padding-bottom:4pt;margin-top:18pt;page-break-before:always">'+title+'</h1>';
     for(let u=1;u<=5;u++){
       const uqs=tqs.filter(q=>q.unit==u);if(!uqs.length)continue;
-      h+='<h2 style="font-family:Arial,sans-serif;color:#283593;font-size:12pt;margin-top:12pt;margin-bottom:6pt">Unit '+u+' \u2013 '+UT[u]+'</h2>';
+      h+='<h2 style="font-family:Arial,sans-serif;color:#283593;font-size:12pt;margin-top:12pt;margin-bottom:6pt">Unit '+u+' \u2013 '+getUN(u)+'</h2>';
       h+='<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9;font-family:\'Times New Roman\',serif"><thead><tr style="background:#1A237E;color:white"><th width="5%">Q.No</th><th width="6%">CO</th><th width="6%">BTL</th><th>Question</th>'+(typeKey==='MCQ'?'<th width="26%">Options</th>':'')+'<th width="6%">Marks</th><th width="5%">Src</th></tr></thead><tbody>';
       uqs.forEach((q,i)=>{
         const bg=i%2===0?'#F5F7FF':'#FFFFFF';
@@ -875,7 +951,7 @@ async function exportWord(){
   setP(85,'Building summary...');
   const total=qs.length;
   const coStmts=['Construct the synchronous sequential circuits.','Solve hazards and design asynchronous sequential circuits.','Relate the testing procedure for combinational circuit and PLA.','Make use of PLD to construct the synchronous circuit design.','Design and use programming tools for implementing digital circuits.'];
-  const utRows=([1,2,3,4,5]).map(u=>{const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)return'';return'<tr><td style="font-weight:bold;color:#1A237E;background:#E8EAF6">Unit '+u+'</td><td>'+UT[u]+'</td><td align="center">'+uqs.filter(q=>q.type==='SA').length+'</td><td align="center">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td align="center">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td align="center" style="font-weight:bold">'+uqs.length+'</td></tr>';}).join('');
+  const utRows=([1,2,3,4,5]).map(u=>{const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)return'';return'<tr><td style="font-weight:bold;color:#1A237E;background:#E8EAF6">Unit '+u+'</td><td>'+getUN(u)+'</td><td align="center">'+uqs.filter(q=>q.type==='SA').length+'</td><td align="center">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td align="center">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td align="center" style="font-weight:bold">'+uqs.length+'</td></tr>';}).join('');
   const coRows=([1,2,3,4,5]).map(co=>{const cqs=qs.filter(q=>q.co==='CO'+co);if(!cqs.length)return'';return'<tr><td style="font-weight:bold;background:#E8EAF6">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td align="center">'+(n||'\u2013')+'</td>';}).join('')+'<td align="center" style="font-weight:bold">'+cqs.length+'</td></tr>';}).join('');
 
   const fullHTML='<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:11pt;margin:0}h1,h2,h3{font-family:Arial,sans-serif}table{page-break-inside:avoid}@page{margin:2cm}p{margin:2pt 0}</style><title>'+esc(sub.code||'QB')+' Question Bank</title></head><body>'
