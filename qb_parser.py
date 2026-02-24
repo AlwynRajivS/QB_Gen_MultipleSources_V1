@@ -225,18 +225,88 @@ def collect_cell_images(tc, rel_map, img_map):
     return rids_to_images(rids, rel_map, img_map)
 
 # ─── Subject detector ─────────────────────────────────────
+
+def extract_co_statements(text_lines):
+    """
+    Extract CO statements from document text lines.
+    Handles patterns like:
+      CO1 / Construct the synchronous sequential circuits.
+      CO2: Solve hazards...
+      "CO Statements" header followed by CO+text pairs
+    Returns dict: {'CO1': 'statement...', 'CO2': '...', ...}
+    """
+    co_stmts = {}
+    n = len(text_lines)
+    i = 0
+    while i < n:
+        line = text_lines[i].strip()
+        # Detect a bare CO label line (e.g. "CO1", "CO 2")
+        bare_co = re.match(r'^CO\s*([1-5])\s*$', line, re.I)
+        if bare_co:
+            co_key = f'CO{bare_co.group(1)}'
+            # Next non-empty line is the statement
+            j = i + 1
+            while j < n and not text_lines[j].strip():
+                j += 1
+            if j < n:
+                stmt = text_lines[j].strip()
+                # Make sure it's not another CO label or a header
+                if not re.match(r'^CO\s*[1-5]\s*$', stmt, re.I) and len(stmt) > 5:
+                    co_stmts[co_key] = stmt
+                    i = j + 1
+                    continue
+        # Detect inline "CO1: statement" or "CO1 – statement"
+        inline = re.match(r'^CO\s*([1-5])\s*[:\u2013\-]\s*(.+)', line, re.I)
+        if inline:
+            co_key = f'CO{inline.group(1)}'
+            co_stmts[co_key] = inline.group(2).strip()
+        i += 1
+    return co_stmts
+
+
+def extract_unit_topics(text_lines):
+    """
+    Extract unit topic/title lines from document text.
+    Handles patterns like:
+      "Syllabus: Unit -1 Sequential Circuit Design"
+      "Unit -1: Sequential Circuit Design"
+      "UNIT 1 – Sequential Circuit Design"
+    Returns dict: {'1': 'Sequential Circuit Design', '2': '...', ...}
+    """
+    topics = {}
+    for line in text_lines:
+        # Pattern: "Syllabus: Unit -1 Sequential Circuit Design"
+        m = re.match(r'Syllabus:\s*Unit\s*[-–]?\s*([1-5])\s+(.+)', line, re.I)
+        if m:
+            topics[m.group(1)] = m.group(2).strip()
+            continue
+        # Pattern: "Unit -1: Title" or "Unit–1 – Title" or "UNIT 1 | Title"
+        m = re.match(r'Unit\s*[-–]?\s*([1-5])\s*[:\u2013\-|]\s*(.+)', line, re.I)
+        if m:
+            topics[m.group(1)] = m.group(2).strip()
+            continue
+        # Pattern: "UNIT-1" alone then next line might be the title (handled separately)
+    return topics
+
+
 def detect_subject(zf):
-    """Scan first few paragraphs for subject/course info"""
+    """Scan first few paragraphs for subject/course info, CO statements, and unit topics"""
     try:
         with zf.open('word/document.xml') as f:
             root = ET.parse(f).getroot()
     except Exception:
-        return {'subject':'Unknown Subject','code':'','dept':'','semester':''}
+        return {
+            'subject': 'Unknown Subject', 'code': '', 'dept': '', 'semester': '',
+            'co_statements': {}, 'unit_topics': {}
+        }
 
-    info = {'subject':'','code':'','dept':'','semester':''}
+    info = {
+        'subject': '', 'code': '', 'dept': '', 'semester': '',
+        'co_statements': {}, 'unit_topics': {}
+    }
     all_paras = root.findall(f'.//{{{W}}}p')
     text_lines = []
-    for p in all_paras[:80]:
+    for p in all_paras[:150]:
         t = ''.join(x.text or '' for x in p.findall(f'.//{{{W}}}t')).strip()
         if t: text_lines.append(t)
 
@@ -262,6 +332,10 @@ def detect_subject(zf):
 
     if not info['subject']:
         info['subject'] = 'Unknown Subject'
+
+    # Extract CO statements and unit topics
+    info['co_statements'] = extract_co_statements(text_lines)
+    info['unit_topics']   = extract_unit_topics(text_lines)
 
     return info
 
@@ -481,6 +555,10 @@ def parse_docx(filepath, source='aqa'):
         if key not in seen:
             seen.add(key)
             unique.append(q)
+
+    # Ensure subject_info always has co_statements and unit_topics keys
+    subject_info.setdefault('co_statements', {})
+    subject_info.setdefault('unit_topics', {})
 
     return unique, subject_info
 
