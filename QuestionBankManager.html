@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Question Bank Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --navy:#0f1923;--deep:#162032;--panel:#1c2b3a;--border:rgba(100,150,200,.18);
+  --mid:#2e4a6a;--steel:#6b8cae;--ice:#d8e8f5;--white:#f0f6ff;
+  --gold:#f0c060;--teal:#00b4a0;--purple:#7c6dfa;--coral:#f07060;--green:#40d080;
+  --r:10px;--shadow:0 8px 32px rgba(0,0,0,.35);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--ice);min-height:100vh;font-size:13.5px;line-height:1.55}
+/* HEADER */
+header{background:linear-gradient(135deg,#0a1525,#162540);border-bottom:1px solid var(--border);padding:0 24px;height:58px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:200;box-shadow:0 2px 20px rgba(0,0,0,.5)}
+.logo{width:38px;height:38px;border-radius:9px;flex-shrink:0;background:linear-gradient(135deg,var(--teal),var(--purple));display:flex;align-items:center;justify-content:center;font-family:'Source Serif 4',serif;font-size:1.1rem;color:#fff;font-weight:700}
+header h1{font-family:'Source Serif 4',serif;font-size:1.1rem;color:var(--white);flex:1}
+header h1 span{color:var(--gold)}
+.hbadge{font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;background:rgba(124,109,250,.15);border:1px solid rgba(124,109,250,.3);color:var(--purple)}
+/* LAYOUT */
+.app{display:grid;grid-template-columns:240px 1fr;min-height:calc(100vh - 58px)}
+aside{background:var(--deep);border-right:1px solid var(--border);padding:16px 0;display:flex;flex-direction:column;gap:2px;position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto}
+.ng{padding:10px 14px 4px}.ngl{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--steel)}
+.ni{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;color:var(--steel);font-size:13px;border-left:3px solid transparent;transition:all .12s;user-select:none}
+.ni:hover{background:rgba(255,255,255,.03);color:var(--ice)}.ni.active{background:rgba(124,109,250,.1);color:#fff;border-left-color:var(--purple);font-weight:500}
+.nic{font-size:15px;width:18px;text-align:center}
+.nct{margin-left:auto;background:var(--mid);color:var(--ice);font-size:10px;padding:1px 7px;border-radius:10px;font-family:'JetBrains Mono',monospace}
+.nd{height:1px;background:var(--border);margin:6px 14px}
+main{padding:24px 28px;overflow-y:auto;min-width:0}
+.page{display:none}.page.active{display:block}
+/* PAGE HEADER */
+.ph{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap}
+.ph-title{font-family:'Source Serif 4',serif;font-size:1.7rem;color:var(--white);line-height:1.2}
+.ph-sub{color:var(--steel);font-size:12.5px;margin-top:3px}
+/* CARD */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:18px}
+.card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.card-title{font-size:.9rem;font-weight:600;color:var(--white)}
+/* UPLOAD */
+.upload-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px}
+.uz{border:2px dashed var(--border);border-radius:var(--r);padding:20px 14px;text-align:center;position:relative;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.015)}
+.uz:hover,.uz.drag{border-color:var(--purple);background:rgba(124,109,250,.06)}.uz.filled{border-style:solid;border-color:var(--teal);background:rgba(0,180,160,.04)}
+.uz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2}
+.uz .zi{font-size:2rem;margin-bottom:8px}.uz h3{font-size:.85rem;font-weight:600;color:var(--white);margin-bottom:3px}.uz p{font-size:11px;color:var(--steel)}
+.fchips{margin-top:8px;display:flex;flex-direction:column;gap:4px;max-height:110px;overflow-y:auto}
+.fc{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border-radius:6px;padding:4px 8px;font-size:11px;color:var(--ice);text-align:left}
+.fc .fr{margin-left:auto;cursor:pointer;color:var(--coral);border:none;background:none;font-size:13px}
+/* PROGRESS */
+.pbar{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:6px 0}
+.pfill{height:100%;background:linear-gradient(90deg,var(--purple),var(--teal));transition:width .3s}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.bp{background:var(--purple);color:#fff}.bp:hover{background:#6a5de0}
+.bs{background:var(--teal);color:#fff}.bs:hover{background:#008a78}
+.bd{background:var(--coral);color:#fff}.bd:hover{background:#d05040}
+.bg{background:transparent;border:1px solid var(--border);color:var(--ice)}.bg:hover{background:rgba(255,255,255,.04)}
+.bsm{padding:5px 11px;font-size:12px;border-radius:6px}.btn:disabled{opacity:.45;cursor:not-allowed}
+.bg2{display:flex;gap:8px;flex-wrap:wrap}
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.sc{background:var(--panel);border:1px solid var(--border);border-radius:var(--r);padding:14px;text-align:center}
+.sc .sn{font-family:'JetBrains Mono',monospace;font-size:2rem;font-weight:600;color:var(--white);line-height:1}
+.sc .sl{font-size:11px;color:var(--steel);margin-top:3px}
+/* TABLE */
+.tw{overflow-x:auto;border-radius:var(--r)}
+table.qb{width:100%;border-collapse:collapse;font-size:12.5px}
+table.qb thead tr{background:rgba(124,109,250,.12)}
+table.qb th{padding:9px 10px;text-align:left;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--steel);font-weight:600;white-space:nowrap;border-bottom:1px solid var(--border)}
+table.qb td{padding:9px 10px;border-bottom:1px solid rgba(100,150,200,.08);vertical-align:top;color:var(--ice)}
+table.qb tbody tr:hover{background:rgba(255,255,255,.02)}
+table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;display:block}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.p-ct{background:rgba(240,112,96,.15);color:var(--coral)}.p-es{background:rgba(64,208,128,.15);color:var(--green)}.p-aqa{background:rgba(124,109,250,.15);color:var(--purple)}
+.k1{color:#40d080}.k2{color:#60b0f0}.k3{color:var(--gold)}.k4{color:var(--coral)}.k5{color:#e060f0}.k6{color:var(--coral)}
+.mcq-opts{margin-top:4px}.mcq-opt{font-size:11.5px;padding:1px 0;color:rgba(216,232,245,.75)}.mcq-opt b{color:var(--teal)}
+/* UNIT BLOCKS */
+.ub{margin-bottom:22px}
+.uhdr{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:var(--r);cursor:pointer;user-select:none;transition:background .12s}
+.uhdr:hover{background:rgba(255,255,255,.04)}
+.unum{width:34px;height:34px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--purple),var(--teal));display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#fff}
+.utitle{flex:1;font-weight:600;color:var(--white);font-size:.875rem}.umeta{font-size:11px;color:var(--steel)}
+.ucaret{color:var(--steel);transition:transform .2s;font-size:12px}.uhdr.closed .ucaret{transform:rotate(-90deg)}
+.ubody{display:block;margin-top:8px}.ubody.hidden{display:none}
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:300;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.overlay.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:680px;width:92%;max-height:86vh;overflow-y:auto;box-shadow:var(--shadow)}
+.mhdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.mtitle{font-family:'Source Serif 4',serif;font-size:1.25rem;color:var(--white)}
+.mc{background:none;border:none;color:var(--steel);font-size:1.4rem;cursor:pointer;padding:4px}.mc:hover{color:var(--coral)}
+/* FORM */
+.fg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fi{display:flex;flex-direction:column;gap:4px}.fi.full{grid-column:1/-1}
+.fi label{font-size:10px;font-weight:600;letter-spacing:.5px;color:var(--steel);text-transform:uppercase}
+.fi input,.fi select,.fi textarea{background:rgba(255,255,255,.04);border:1px solid var(--border);color:var(--ice);padding:8px 11px;border-radius:7px;font-family:inherit;font-size:13px;outline:none;transition:border-color .15s}
+.fi input:focus,.fi select:focus,.fi textarea:focus{border-color:var(--purple)}
+.fi textarea{min-height:80px;resize:vertical}.fi select option{background:var(--panel)}
+.mcq-rows{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.mcq-row{display:flex;gap:8px;align-items:center}
+.ol{width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.07);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--steel);flex-shrink:0}
+.mcq-row input[type=text]{flex:1}.mcq-row input[type=radio]{accent-color:var(--teal);cursor:pointer}
+/* LOG */
+.log{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--steel);max-height:200px;overflow-y:auto;margin-top:10px}
+.lok{color:var(--green)}.lerr{color:var(--coral)}.lwarn{color:var(--gold)}.linfo{color:var(--purple)}
+/* EMPTY */
+.empty{text-align:center;padding:50px 20px;color:var(--steel)}
+.empty .ei{font-size:2.8rem;margin-bottom:12px}.empty h3{color:var(--ice);font-size:1rem;margin-bottom:6px}
+.empty p{font-size:12.5px;max-width:320px;margin:0 auto}
+/* FILTER */
+.filter-row{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.filter-row select,.filter-row input{background:var(--panel);border:1px solid var(--border);color:var(--ice);padding:6px 10px;border-radius:7px;font-family:inherit;font-size:12.5px;outline:none}
+.filter-row label{font-size:11.5px;color:var(--steel)}.filter-row input[type=text]{min-width:180px}
+/* EXPORT */
+.exp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:10px;margin-top:10px}
+.exc{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:var(--r);padding:14px;cursor:pointer;transition:all .15s;text-align:center}
+.exc:hover{border-color:var(--purple);background:rgba(124,109,250,.06)}
+.exc .ei{font-size:1.8rem;margin-bottom:6px}.exc h4{font-size:.82rem;color:var(--white);margin-bottom:3px}.exc p{font-size:10.5px;color:var(--steel)}
+/* TOAST */
+#toasts{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:7px}
+.toast{background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:11px 16px;font-size:12.5px;color:var(--ice);box-shadow:var(--shadow);display:flex;align-items:center;gap:9px;min-width:240px;animation:sI .25s ease;border-left:3px solid var(--purple)}
+.toast.ok{border-left-color:var(--teal)}.toast.err{border-left-color:var(--coral)}.toast.warn{border-left-color:var(--gold)}
+@keyframes sI{from{transform:translateX(36px);opacity:0}to{transform:translateX(0);opacity:1}}
+/* IMG UPLOAD */
+.img-area{border:1px dashed var(--border);border-radius:8px;padding:10px;text-align:center;cursor:pointer;font-size:11.5px;color:var(--steel);transition:border-color .15s}
+.img-area:hover{border-color:var(--purple);color:var(--ice)}
+.imgp{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.ithumb{position:relative;display:inline-block}.ithumb img{max-width:110px;max-height:75px;border-radius:5px;display:block}
+.ithumb .ri{position:absolute;top:-5px;right:-5px;background:var(--coral);color:#fff;border:none;border-radius:50%;width:17px;height:17px;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--mid);border-radius:3px}
+@media print{header,aside,.bg2,.filter-row,.overlay{display:none!important}.app{grid-template-columns:1fr}main{padding:0}body{background:#fff;color:#000}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">QB</div>
+  <h1>Question Bank <span>Manager</span></h1>
+  <span class="hbadge" id="hbadge-sub">No Subject</span>
+  <span class="hbadge" id="hbadge-cnt">0 Questions</span>
+</header>
+
+<div class="app">
+<aside>
+  <div class="ng"><div class="ngl">Main</div></div>
+  <div class="ni active" onclick="nav('dash',this)"><span class="nic">📊</span>Dashboard</div>
+  <div class="ni" onclick="nav('upload',this)"><span class="nic">📤</span>Upload Files</div>
+  <div class="nd"></div>
+  <div class="ng"><div class="ngl">Question Bank</div></div>
+  <div class="ni" onclick="nav('sa',this)"><span class="nic">📝</span>Part A – Short Answer<span class="nct" id="nc-sa">0</span></div>
+  <div class="ni" onclick="nav('mcq',this)"><span class="nic">🔘</span>Part A – MCQ<span class="nct" id="nc-mcq">0</span></div>
+  <div class="ni" onclick="nav('pb',this)"><span class="nic">📋</span>Part B Questions<span class="nct" id="nc-pb">0</span></div>
+  <div class="nd"></div>
+  <div class="ng"><div class="ngl">Tools</div></div>
+  <div class="ni" onclick="nav('add',this)"><span class="nic">➕</span>Add Question</div>
+  <div class="ni" onclick="nav('export',this)"><span class="nic">💾</span>Export / Word</div>
+</aside>
+
+<main>
+
+<!-- DASHBOARD -->
+<div class="page active" id="page-dash">
+  <div class="ph">
+    <div><div class="ph-title">Dashboard</div><div class="ph-sub" id="dash-info">Upload files to begin</div></div>
+    <button class="btn bp" onclick="nav('upload',document.querySelectorAll('.ni')[1])">📤 Upload Files</button>
+  </div>
+  <div class="sg">
+    <div class="sc"><div class="sn" id="st-t" style="color:var(--purple)">0</div><div class="sl">Total Questions</div></div>
+    <div class="sc"><div class="sn" id="st-sa" style="color:var(--teal)">0</div><div class="sl">Short Answer</div></div>
+    <div class="sc"><div class="sn" id="st-mcq" style="color:var(--gold)">0</div><div class="sl">MCQ</div></div>
+    <div class="sc"><div class="sn" id="st-pb" style="color:var(--coral)">0</div><div class="sl">Part B</div></div>
+    <div class="sc"><div class="sn" id="st-ct" style="color:var(--coral)">0</div><div class="sl">Cycle Test</div></div>
+    <div class="sc"><div class="sn" id="st-es" style="color:var(--green)">0</div><div class="sl">End Semester</div></div>
+    <div class="sc"><div class="sn" id="st-aqa" style="color:var(--purple)">0</div><div class="sl">AQA Bank</div></div>
+    <div class="sc"><div class="sn" id="st-img" style="color:var(--teal)">0</div><div class="sl">With Images</div></div>
+  </div>
+  <div class="card"><div class="card-hdr"><span>📈</span><div class="card-title">Unit-wise Breakdown</div></div><div id="unit-chart"><div class="empty"><div class="ei">📂</div><h3>No data</h3><p>Upload files to see stats</p></div></div></div>
+  <div class="card"><div class="card-hdr"><span>🎯</span><div class="card-title">CO × Bloom's Taxonomy Coverage</div></div><div id="co-chart"><div class="empty"><div class="ei">🎯</div><h3>No data</h3></div></div></div>
+</div>
+
+<!-- UPLOAD -->
+<div class="page" id="page-upload">
+  <div class="ph"><div><div class="ph-title">Upload Question Papers</div><div class="ph-sub">Drop or select multiple .docx files per category. Images &amp; equations fully preserved.</div></div></div>
+  <div class="card">
+    <div class="card-hdr"><span>🏫</span><div class="card-title">Subject Information (Auto-detected &amp; editable)</div></div>
+    <div class="fg">
+      <div class="fi"><label>Subject Name</label><input type="text" id="sub-name" placeholder="Auto-detected from uploaded file..."></div>
+      <div class="fi"><label>Course Code</label><input type="text" id="sub-code" placeholder="e.g. VEC311"></div>
+      <div class="fi"><label>Department</label><input type="text" id="sub-dept" value="ECE"></div>
+      <div class="fi"><label>Semester</label><input type="text" id="sub-sem" placeholder="e.g. Fifth Semester"></div>
+    </div>
+  </div>
+  <div class="upload-grid">
+    <div class="uz" id="uz-ct" ondragover="dov(event,'ct')" ondragleave="dol('ct')" ondrop="ddr(event,'ct')">
+      <input type="file" multiple accept=".docx" onchange="fsel(event,'ct')">
+      <div class="zi">🔄</div><h3>Cycle Test Papers</h3><p>Internal Assessment / Quiz (N files)</p>
+      <div class="pbar" id="pb-ct" style="display:none"><div class="pfill" id="pf-ct" style="width:0%"></div></div>
+      <div class="fchips" id="fl-ct"></div>
+    </div>
+    <div class="uz" id="uz-es" ondragover="dov(event,'es')" ondragleave="dol('es')" ondrop="ddr(event,'es')">
+      <input type="file" multiple accept=".docx" onchange="fsel(event,'es')">
+      <div class="zi">📄</div><h3>End Semester Papers</h3><p>Final / University Examinations (N files)</p>
+      <div class="pbar" id="pb-es" style="display:none"><div class="pfill" id="pf-es" style="width:0%"></div></div>
+      <div class="fchips" id="fl-es"></div>
+    </div>
+    <div class="uz" id="uz-aqa" ondragover="dov(event,'aqa')" ondragleave="dol('aqa')" ondrop="ddr(event,'aqa')">
+      <input type="file" multiple accept=".docx" onchange="fsel(event,'aqa')">
+      <div class="zi">📚</div><h3>AQA / Question Bank</h3><p>Assessment Question Archive (N files)</p>
+      <div class="pbar" id="pb-aqa" style="display:none"><div class="pfill" id="pf-aqa" style="width:0%"></div></div>
+      <div class="fchips" id="fl-aqa"></div>
+    </div>
+  </div>
+  <div class="bg2" style="margin-bottom:14px">
+    <button class="btn bp" onclick="processAll()" id="btn-proc">⚙️ Process All Files</button>
+    <button class="btn bs" onclick="nav('export',document.querySelectorAll('.ni')[7])" id="btn-gw" disabled>📝 Generate Word Document</button>
+    <button class="btn bg" onclick="clearAll()">🗑️ Clear All</button>
+  </div>
+  <div id="log-wrap" style="display:none" class="card">
+    <div class="card-hdr"><span>⚙️</span><div class="card-title">Processing Log</div></div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<!-- SHORT ANSWER -->
+<div class="page" id="page-sa">
+  <div class="ph">
+    <div><div class="ph-title">Part A – Short Answer</div><div class="ph-sub">2-mark questions organised unit-wise</div></div>
+    <div class="bg2"><button class="btn bs bsm" onclick="openAdd('SA')">➕ Add</button><button class="btn bg bsm" onclick="exportCSV('SA')">📥 CSV</button></div>
+  </div>
+  <div class="filter-row">
+    <label>Filter:</label>
+    <select onchange="renderSec('SA')" id="fsa-u"><option value="">All Units</option><option value="1">Unit 1</option><option value="2">Unit 2</option><option value="3">Unit 3</option><option value="4">Unit 4</option><option value="5">Unit 5</option></select>
+    <select onchange="renderSec('SA')" id="fsa-s"><option value="">All Sources</option><option value="ct">CT</option><option value="es">ES</option><option value="aqa">AQA</option></select>
+    <input type="text" id="fsa-q" placeholder="Search question..." oninput="renderSec('SA')">
+  </div>
+  <div id="sa-c"></div>
+</div>
+
+<!-- MCQ -->
+<div class="page" id="page-mcq">
+  <div class="ph">
+    <div><div class="ph-title">Part A – MCQ</div><div class="ph-sub">Multiple choice questions with all 4 options, unit-wise</div></div>
+    <div class="bg2"><button class="btn bs bsm" onclick="openAdd('MCQ')">➕ Add MCQ</button><button class="btn bg bsm" onclick="exportCSV('MCQ')">📥 CSV</button></div>
+  </div>
+  <div class="filter-row">
+    <label>Filter:</label>
+    <select onchange="renderSec('MCQ')" id="fmcq-u"><option value="">All Units</option><option value="1">Unit 1</option><option value="2">Unit 2</option><option value="3">Unit 3</option><option value="4">Unit 4</option><option value="5">Unit 5</option></select>
+    <select onchange="renderSec('MCQ')" id="fmcq-s"><option value="">All Sources</option><option value="ct">CT</option><option value="es">ES</option><option value="aqa">AQA</option></select>
+    <input type="text" id="fmcq-q" placeholder="Search question..." oninput="renderSec('MCQ')">
+  </div>
+  <div id="mcq-c"></div>
+</div>
+
+<!-- PART B -->
+<div class="page" id="page-pb">
+  <div class="ph">
+    <div><div class="ph-title">Part B Questions</div><div class="ph-sub">Long-answer questions (8/16 marks), unit-wise</div></div>
+    <div class="bg2"><button class="btn bs bsm" onclick="openAdd('PARTB')">➕ Add</button><button class="btn bg bsm" onclick="exportCSV('PARTB')">📥 CSV</button></div>
+  </div>
+  <div class="filter-row">
+    <label>Filter:</label>
+    <select onchange="renderSec('PARTB')" id="fpb-u"><option value="">All Units</option><option value="1">Unit 1</option><option value="2">Unit 2</option><option value="3">Unit 3</option><option value="4">Unit 4</option><option value="5">Unit 5</option></select>
+    <select onchange="renderSec('PARTB')" id="fpb-s"><option value="">All Sources</option><option value="ct">CT</option><option value="es">ES</option><option value="aqa">AQA</option></select>
+    <input type="text" id="fpb-q" placeholder="Search question..." oninput="renderSec('PARTB')">
+  </div>
+  <div id="pb-c"></div>
+</div>
+
+<!-- ADD QUESTION -->
+<div class="page" id="page-add">
+  <div class="ph"><div><div class="ph-title">Add Question Manually</div><div class="ph-sub">Enter CO, BTL, unit, question text, images or equations</div></div></div>
+  <div class="card">
+    <div class="fg">
+      <div class="fi"><label>Question Type</label><select id="mf-type" onchange="updateMF()"><option value="SA">Part A – Short Answer (2 marks)</option><option value="MCQ">Part A – MCQ (2 marks)</option><option value="PARTB">Part B (8/16 marks)</option></select></div>
+      <div class="fi"><label>Source</label><select id="mf-src"><option value="ct">Cycle Test</option><option value="es">End Semester</option><option value="aqa">AQA</option></select></div>
+      <div class="fi"><label>Unit</label><select id="mf-unit"><option value="1">Unit 1 – Sequential Circuit Design</option><option value="2">Unit 2 – Asynchronous Sequential</option><option value="3">Unit 3 – Testing</option><option value="4">Unit 4 – PLD Design</option><option value="5">Unit 5 – Digital Systems</option></select></div>
+      <div class="fi"><label>CO</label><select id="mf-co"><option value="CO1">CO1</option><option value="CO2">CO2</option><option value="CO3">CO3</option><option value="CO4">CO4</option><option value="CO5">CO5</option></select></div>
+      <div class="fi"><label>BTL / K-Level</label><select id="mf-btl"><option value="K1">K1 – Remember</option><option value="K2">K2 – Understand</option><option value="K3">K3 – Apply</option><option value="K4">K4 – Analyse</option><option value="K5">K5 – Evaluate</option><option value="K6">K6 – Create</option></select></div>
+      <div class="fi"><label>Marks</label><select id="mf-marks"><option value="2">2</option><option value="8">8</option><option value="16">16</option></select></div>
+      <div class="fi"><label>Q.No</label><input type="text" id="mf-qno" placeholder="e.g. 6(a)"></div>
+      <div class="fi full"><label>Question Text</label><textarea id="mf-q" placeholder="Enter full question text here..."></textarea></div>
+      <div class="fi full" id="mf-opts" style="display:none">
+        <label>MCQ Options — select ✔ radio for correct answer</label>
+        <div class="mcq-rows">
+          <div class="mcq-row"><div class="ol">A</div><input type="text" id="oa" placeholder="Option A"><input type="radio" name="corr" value="A" title="Mark as correct"></div>
+          <div class="mcq-row"><div class="ol">B</div><input type="text" id="ob" placeholder="Option B"><input type="radio" name="corr" value="B"></div>
+          <div class="mcq-row"><div class="ol">C</div><input type="text" id="oc" placeholder="Option C"><input type="radio" name="corr" value="C"></div>
+          <div class="mcq-row"><div class="ol">D</div><input type="text" id="od" placeholder="Option D"><input type="radio" name="corr" value="D"></div>
+        </div>
+      </div>
+      <div class="fi full">
+        <label>Images / Diagrams / Circuit Figures</label>
+        <label class="img-area">📷 Click to attach images, diagrams or circuit figures
+          <input type="file" accept="image/*" multiple style="display:none" onchange="handleImgs(event)">
+        </label>
+        <div class="imgp" id="mf-imgs"></div>
+      </div>
+    </div>
+    <div class="bg2" style="margin-top:14px">
+      <button class="btn bp" onclick="saveManual()">💾 Save Question</button>
+      <button class="btn bg" onclick="resetMF()">🔄 Reset</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPORT -->
+<div class="page" id="page-export">
+  <div class="ph"><div><div class="ph-title">Export &amp; Word Generation</div><div class="ph-sub">Generate consolidated question bank in Word format with embedded images</div></div></div>
+  <div class="card">
+    <div class="card-hdr"><span>🔧</span><div class="card-title">Filter for Export</div></div>
+    <div class="filter-row">
+      <select id="ef-u"><option value="">All Units</option><option value="1">Unit 1</option><option value="2">Unit 2</option><option value="3">Unit 3</option><option value="4">Unit 4</option><option value="5">Unit 5</option></select>
+      <select id="ef-s"><option value="">All Sources</option><option value="ct">Cycle Test</option><option value="es">End Semester</option><option value="aqa">AQA</option></select>
+      <select id="ef-t"><option value="">All Types</option><option value="SA">Short Answer</option><option value="MCQ">MCQ</option><option value="PARTB">Part B</option></select>
+    </div>
+    <div class="exp-grid">
+      <div class="exc" onclick="exportWord()"><div class="ei">📝</div><h4>Word Document</h4><p>Full question bank with images, CO/BTL matrix, unit tables</p></div>
+      <div class="exc" onclick="exportJSON()"><div class="ei">📋</div><h4>JSON Export</h4><p>Complete data with base64 images for re-import</p></div>
+      <div class="exc" onclick="exportCSVAll()"><div class="ei">📊</div><h4>CSV / Excel</h4><p>Spreadsheet format for analysis</p></div>
+      <div class="exc" onclick="window.print()"><div class="ei">🖨️</div><h4>Print</h4><p>Print the current question bank view</p></div>
+    </div>
+    <div id="wp" style="display:none;margin-top:14px">
+      <div class="pbar"><div class="pfill" id="wpf" style="width:0%"></div></div>
+      <p id="wpm" style="font-size:12px;color:var(--steel);margin-top:3px"></p>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<div class="overlay" id="modal">
+  <div class="modal">
+    <div class="mhdr"><div class="mtitle" id="mtitle">Edit Question</div><button class="mc" onclick="closeModal()">✕</button></div>
+    <div id="mbody"></div>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<script>
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:''}};
+let mImgs=[];
+const UN={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+const COU={'CO1':'1','CO2':'2','CO3':'3','CO4':'4','CO5':'5'};
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function nav(id,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+  const pg=document.getElementById('page-'+id);
+  if(pg)pg.classList.add('active');
+  if(el)el.classList.add('active');
+}
+
+// ═══════════════════════════════════════
+// FILE HANDLING
+// ═══════════════════════════════════════
+function dov(e,c){e.preventDefault();document.getElementById('uz-'+c).classList.add('drag')}
+function dol(c){document.getElementById('uz-'+c).classList.remove('drag')}
+function ddr(e,c){e.preventDefault();dol(c);addF([...e.dataTransfer.files].filter(f=>f.name.endsWith('.docx')),c)}
+function fsel(e,c){addF([...e.target.files],c);e.target.value=''}
+function addF(files,cat){
+  files.forEach(f=>{if(!DB.files[cat].find(x=>x.name===f.name&&x.size===f.size))DB.files[cat].push(f)});
+  renderChips(cat);
+}
+function removeFile(cat,i){DB.files[cat].splice(i,1);renderChips(cat)}
+function renderChips(cat){
+  const list=document.getElementById('fl-'+cat),zone=document.getElementById('uz-'+cat);
+  list.innerHTML='';
+  DB.files[cat].forEach((f,i)=>{
+    const d=document.createElement('div');d.className='fc';
+    d.innerHTML='📄 '+(f.name.length>30?f.name.slice(0,27)+'...':f.name)+'<button class="fr" onclick="removeFile(\''+cat+'\','+i+')">✕</button>';
+    list.appendChild(d);
+  });
+  zone.classList.toggle('filled',DB.files[cat].length>0);
+}
+function clearAll(){
+  DB.files={ct:[],es:[],aqa:[]};
+  ['ct','es','aqa'].forEach(c=>{renderChips(c);document.getElementById('pb-'+c).style.display='none'});
+  document.getElementById('log-wrap').style.display='none';
+  toast('Cleared all files','warn');
+}
+
+// ═══════════════════════════════════════
+// DOCX PARSER — pure browser via JSZip
+// ═══════════════════════════════════════
+const R_NS='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const PKG_NS='http://schemas.openxmlformats.org/package/2006/relationships';
+
+async function buildRelMap(zip){
+  const m={};
+  try{
+    const x=await zip.files['word/_rels/document.xml.rels'].async('text');
+    new DOMParser().parseFromString(x,'text/xml').querySelectorAll('Relationship').forEach(r=>{
+      m[r.getAttribute('Id')]=r.getAttribute('Target').replace(/.*\//,'');
+    });
+  }catch(e){}
+  return m;
+}
+
+async function buildImgMap(zip){
+  const m={};
+  for(const[p,f]of Object.entries(zip.files)){
+    if(!p.startsWith('word/media/'))continue;
+    const ext=p.split('.').pop().toLowerCase();
+    if(!['png','jpg','jpeg','gif','bmp','webp'].includes(ext))continue;
+    const mime=ext==='png'?'image/png':ext==='gif'?'image/gif':'image/jpeg';
+    const b64=await f.async('base64');
+    m[p.split('/').pop()]='data:'+mime+';base64,'+b64;
+  }
+  return m;
+}
+
+// Precise cell paragraph extractor — avoids nested table text bleeding
+function getCellParas(tc){
+  const result=[];
+  function walk(node){
+    for(const c of node.childNodes){
+      if(c.localName==='tbl')continue; // skip nested tables
+      if(c.localName==='p'){
+        let text='';
+        const rids=[];
+        function wt(n){for(const x of n.childNodes){if(x.localName==='t')text+=x.textContent||'';else if(x.localName==='blip'){for(const a of x.attributes)if(a.localName==='embed')rids.push(a.value);}else if(x.localName==='imagedata'){const rid=x.getAttributeNS(R_NS,'id')||'';if(rid)rids.push(rid);}else wt(x);}}
+        wt(c);
+        result.push({text:text.trim(),rids});
+      }else walk(c);
+    }
+  }
+  walk(tc);
+  return result;
+}
+
+function getCellText(tc){return getCellParas(tc).map(p=>p.text).filter(Boolean).join('\n')}
+
+function getCellImgs(tc,rm,im){
+  const imgs=[];const seen=new Set();
+  function walk(node){
+    for(const c of node.childNodes){
+      if(c.localName==='tbl')continue;
+      if(c.localName==='blip'){for(const a of c.attributes){if(a.localName==='embed'){const fn=rm[a.value];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}}}
+      else if(c.localName==='imagedata'){const rid=c.getAttributeNS(R_NS,'id')||'';if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}}
+      else walk(c);
+    }
+  }
+  walk(tc);return imgs;
+}
+
+function exCoBtl(txt){
+  const cm=txt.match(/CO\s*([1-5])/i),bm=txt.match(/K[-\u2013]?\s*([1-6])/i);
+  return{co:cm?'CO'+cm[1]:null,btl:bm?'K'+bm[1]:null};
+}
+
+function isHdr(t){
+  if(!t||t.trim().length<3)return true;
+  const s=t.trim();
+  return/^(Part\s*[A-C]|PART\s*[\u2013\-][AB]|\(OR\)|Answer ALL|Unit\s*-?\s*[1-5]\b|CO,?\s*BTL|Q\.\s*No\.|UNIT-\d|Syllabus:|Short Qu|Multiple Ch|Hyperlinks|Questions|^(I|II|III|M|E|D|Mark|Level|Portion|CO|BTL|K Level)$)/i.test(s);
+}
+
+// Accurate MCQ parser — handles 3 formats used by VEC311 papers
+function parseMCQ(paras){
+  if(!paras.length)return{qText:'',opts:[]};
+  const q0=paras[0].text;
+  const rest=paras.slice(1).map(p=>p.text).filter(Boolean);
+
+  // FORMAT 1: exactly 4 separate option paragraphs (most common in AQA)
+  if(rest.length===4){
+    return{qText:q0,opts:rest.map(o=>o.replace(/^[a-dA-D][.)]\s*/,'').trim())};
+  }
+  // FORMAT 2: 3 separate paragraphs
+  if(rest.length===3){
+    return{qText:q0,opts:[...rest.map(o=>o.replace(/^[a-dA-D][.)]\s*/,'').trim()),'']};
+  }
+  // FORMAT 3: all inline — "question a) X b) Y c) Z d) W"
+  const all=[q0,...rest].join(' ');
+  const m=all.match(/^(.*?)\s+[aA]\)\s*(.+?)\s+[bB]\)\s*(.+?)\s+[cC]\)\s*(.+?)\s+[dD]\)\s*(.+?)$/s);
+  if(m)return{qText:m[1].trim(),opts:[m[2],m[3],m[4],m[5]].map(s=>s.trim())};
+  // FORMAT 4: "1  b) 2  c) 3  d) 4" on second line
+  if(rest.length===1){
+    const pts=rest[0].split(/\b[b-dB-D]\s*\)\s*/);
+    if(pts.length>=3){
+      const a=pts[0].replace(/^[aA]\s*\)\s*/,'').trim()||rest[0].split(/\s+/)[0]||'';
+      return{qText:q0,opts:[a,...pts.slice(1,4).map(s=>s.trim()),'']}
+    }
+  }
+  return{qText:[q0,...rest].join('\n').trim(),opts:[]};
+}
+
+function detectType(marks,paras){
+  if(marks>=8)return'PARTB';
+  const{opts}=parseMCQ(paras);
+  return opts.length>=3?'MCQ':'SA';
+}
+
+function detectSubject(xmlDoc){
+  const info={subject:'',code:'',dept:'ECE',semester:''};
+  const texts=[];
+  xmlDoc.querySelectorAll('*').forEach(el=>{if(el.localName==='t'){const t=(el.textContent||'').trim();if(t.length>2)texts.push(t);}});
+  const uniq=[...new Set(texts)].slice(0,120);
+  for(const t of uniq){
+    if(!info.code){const cm=t.match(/[A-Z]{2,4}\d{3}/);if(cm)info.code=cm[0];}
+    if(!info.subject&&/Digital VLSI/i.test(t))info.subject='Digital VLSI Design and Technology';
+    if(!info.dept&&/Electronics.*Communication|Electrical.*Electronics/i.test(t))info.dept='ECE';
+    if(!info.semester){const sm=t.match(/(Fifth|Third|Fourth|Sixth|Seventh|Second|First)\s*Semester/i);if(sm)info.semester=sm[0];}
+    const sm2=t.match(/Semester:\s*(.+)/i);if(sm2&&!info.semester)info.semester=sm2[1].trim().slice(0,20);
+    if(!info.subject&&t.length>25&&/Design|Technology|Circuit|Signal|Network|Electron/i.test(t)&&!/Exam|Assessment|Semester|Dept|Regulation|Internal|Answer/i.test(t))info.subject=t.slice(0,80);
+  }
+  if(!info.subject)info.subject='Unknown Subject';
+  return info;
+}
+
+function getDirectChildren(node,localName){
+  const result=[];
+  for(const c of node.childNodes){
+    if(c.localName===localName)result.push(c);
+    else if(c.localName==='thead'||c.localName==='tbody'){
+      for(const cc of c.childNodes)if(cc.localName===localName)result.push(cc);
+    }
+  }
+  return result;
+}
+
+async function parseDocx(file,source){
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const rm=await buildRelMap(zip);
+    const im=await buildImgMap(zip);
+    const xmlTxt=await zip.files['word/document.xml'].async('text');
+    const xmlDoc=new DOMParser().parseFromString(xmlTxt,'text/xml');
+    const subInfo=detectSubject(xmlDoc);
+
+    const qs=[];let qCnt=1;
+
+    // Collect ALL tables recursively
+    const allTbls=[];
+    function collectTbls(node){for(const c of node.childNodes){if(c.localName==='tbl')allTbls.push(c);collectTbls(c);}}
+    collectTbls(xmlDoc.documentElement);
+
+    for(const tbl of allTbls){
+      const rows=getDirectChildren(tbl,'tr');
+      if(rows.length<3)continue;
+
+      // Detect layout by scanning all rows
+      let layout=null;
+      for(const row of rows){
+        const cells=getDirectChildren(row,'tc');
+        if(cells.length===4){
+          const t0=getCellText(cells[0]);
+          const{co}=exCoBtl(t0);
+          if(co&&getCellText(cells[2]).length>8){layout='4col';break;}
+          if(/co.*btl|btl.*co|question/i.test(t0.toLowerCase())){layout='4col';break;}
+        }
+        if(cells.length>=5){
+          const t1=getCellText(cells[1]);
+          const{co}=exCoBtl(t1);
+          if(co&&getCellText(cells[3]).length>8){layout='7col';break;}
+          const joined=cells.slice(0,5).map(c=>getCellText(c)).join(' ');
+          if(/knowledge|question.*mark/i.test(joined)){layout='7col';break;}
+        }
+      }
+      if(!layout)continue;
+
+      let curSec='SA';
+      for(const row of rows){
+        const cells=getDirectChildren(row,'tc');
+        // Section markers
+        if(cells.length===1){
+          const t=getCellText(cells[0]);
+          if(/PART[\s\u2013\-]*B/i.test(t))curSec='PARTB';
+          else if(/MCQ|Multiple.?Choice/i.test(t))curSec='MCQ';
+          else if(/PART[\s\u2013\-]*A.*Short/i.test(t))curSec='SA';
+          continue;
+        }
+        if(cells.length===2){
+          const t0=getCellText(cells[0]);
+          if(/Part\s+[BC]/i.test(t0))curSec='PARTB';
+          else if(/Part\s+A/i.test(t0))curSec='SA';
+          continue;
+        }
+
+        // 4-col layout
+        if(layout==='4col'&&cells.length>=4){
+          const coTxt=getCellText(cells[0]);
+          const qnoTxt=getCellText(cells[1]);
+          const mrkTxt=getCellText(cells[3]);
+          const{co,btl}=exCoBtl(coTxt);
+          if(!co)continue;
+          const marks=parseInt((mrkTxt.match(/\d+/)||['2'])[0])||2;
+          const paras=getCellParas(cells[2]);
+          const qFirst=paras[0]?.text||'';
+          if(isHdr(qFirst)||qFirst.length<5)continue;
+          const imgs=[...getCellImgs(cells[2],rm,im),...getCellImgs(cells[1],rm,im)];
+          const unit=COU[co]||'1';
+          const qType=detectType(marks,paras);
+          let qText='',opts=[];
+          if(qType==='MCQ'){const r=parseMCQ(paras);qText=r.qText;opts=r.opts;}
+          else qText=paras.map(p=>p.text).filter(Boolean).join('\n');
+          if(!qText.trim())continue;
+          qs.push({id:source+'_'+Date.now()+'_'+(qCnt++),type:qType,unit,co,btl:btl||'K2',marks,qno:qnoTxt||String(qCnt),text:qText.trim(),options:opts,correct:'',images:imgs,source,filename:file.name,subject:subInfo.subject});
+        }
+
+        // 7-col layout
+        else if(layout==='7col'&&cells.length>=5){
+          const qnoTxt=getCellText(cells[0]);
+          const coTxt=getCellText(cells[1]);
+          const kTxt=getCellText(cells[2]);
+          const mrkTxt=getCellText(cells[4]||cells[cells.length-1]);
+          const{co}=exCoBtl(coTxt);
+          if(!co)continue;
+          const km=kTxt.match(/K\s*([1-6])/i);
+          const btl=km?'K'+km[1]:'K2';
+          const marks=parseInt((mrkTxt.match(/\d+/)||['2'])[0])||2;
+          const paras=getCellParas(cells[3]);
+          const qFirst=paras[0]?.text||'';
+          const allQtxt=paras.map(p=>p.text).join(' ');
+          if(/PART[\s\u2013\-]*B/i.test(allQtxt))curSec='PARTB';
+          if(/MCQ|Multiple.?Choice/i.test(allQtxt))curSec='MCQ';
+          if(isHdr(qFirst)||qFirst.length<5)continue;
+          const imgs=getCellImgs(cells[3],rm,im);
+          const unit=COU[co]||'1';
+          let qType,qText='',opts=[];
+          if(marks>=8||curSec==='PARTB'){qType='PARTB';qText=paras.map(p=>p.text).filter(Boolean).join('\n');}
+          else if(curSec==='MCQ'){const r=parseMCQ(paras);qType=r.opts.length>=3?'MCQ':'SA';qText=r.qText;opts=r.opts;}
+          else{const r=parseMCQ(paras);qType=r.opts.length>=3?'MCQ':'SA';if(qType==='MCQ'){qText=r.qText;opts=r.opts;}else qText=paras.map(p=>p.text).filter(Boolean).join('\n');}
+          if(!qText.trim())continue;
+          qs.push({id:source+'_'+Date.now()+'_'+(qCnt++),type:qType,unit,co,btl,marks,qno:qnoTxt||String(qCnt),text:qText.trim(),options:opts,correct:'',images:imgs,source,filename:file.name,subject:subInfo.subject});
+        }
+      }
+    }
+    return{qs,subInfo};
+  }catch(err){console.error('parseDocx:',err);return{qs:[],subInfo:{subject:'',code:'',dept:'ECE',semester:''}};}
+}
+
+// ═══════════════════════════════════════
+// PROCESS ALL FILES
+// ═══════════════════════════════════════
+async function processAll(){
+  const btn=document.getElementById('btn-proc');
+  btn.disabled=true;btn.textContent='⚙️ Processing...';
+  document.getElementById('log-wrap').style.display='block';
+  const logEl=document.getElementById('log');logEl.innerHTML='';
+
+  function addLog(msg,cls=''){
+    const d=document.createElement('div');d.className=cls;d.textContent=msg;
+    logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;
+  }
+
+  let totalNew=0;
+  for(const cat of['ct','es','aqa']){
+    if(!DB.files[cat].length)continue;
+    addLog('['+cat.toUpperCase()+'] Processing '+DB.files[cat].length+' file(s)...','linfo');
+    const prog=document.getElementById('pb-'+cat),fill=document.getElementById('pf-'+cat);
+    prog.style.display='block';
+    for(let i=0;i<DB.files[cat].length;i++){
+      const f=DB.files[cat][i];
+      addLog('  → '+f.name);
+      fill.style.width=Math.round(i/DB.files[cat].length*100)+'%';
+      try{
+        const{qs,subInfo}=await parseDocx(f,cat);
+        if(!DB.sub.subject&&subInfo.subject){DB.sub=subInfo;updateSubjectFields(subInfo);}
+        let added=0;
+        qs.forEach(q=>{
+          const key=q.co+'|'+q.text.slice(0,50).toLowerCase().trim();
+          if(!DB.questions.find(x=>(x.co+'|'+x.text.slice(0,50).toLowerCase().trim())===key)){DB.questions.push(q);added++;}
+        });
+        totalNew+=added;
+        const withImgs=qs.filter(q=>q.images&&q.images.length>0).length;
+        addLog('    ✓ '+qs.length+' questions ('+added+' new, '+withImgs+' with images)','lok');
+      }catch(err){addLog('    ✗ Error: '+err.message,'lerr');}
+    }
+    fill.style.width='100%';
+  }
+
+  // Apply manual overrides
+  ['name','code','dept','sem'].forEach(k=>{
+    const v=document.getElementById('sub-'+k).value;
+    if(v){if(k==='name')DB.sub.subject=v;else if(k==='sem')DB.sub.semester=v;else DB.sub[k==='code'?'code':'dept']=v;}
+  });
+
+  addLog('✅ Done! Total: '+DB.questions.length+' ('+totalNew+' new added)','lok');
+  btn.disabled=false;btn.textContent='⚙️ Process All Files';
+  document.getElementById('btn-gw').disabled=false;
+  document.getElementById('hbadge-sub').textContent=(DB.sub.code||'QB')+(DB.sub.subject?' – '+DB.sub.subject.slice(0,25):'');
+  updateCounts();renderAll();
+  toast('Processed! '+DB.questions.length+' questions ('+totalNew+' new)','ok');
+}
+
+function updateSubjectFields(info){
+  document.getElementById('sub-name').value=info.subject||'';
+  document.getElementById('sub-code').value=info.code||'';
+  document.getElementById('sub-dept').value=info.dept||'ECE';
+  document.getElementById('sub-sem').value=info.semester||'';
+}
+
+// ═══════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════
+function renderAll(){renderSec('SA');renderSec('MCQ');renderSec('PARTB');renderDash();updateCounts();}
+
+function getFiltered(type){
+  const su=document.getElementById('f'+type.toLowerCase().replace('partb','pb')+'-u')?.value||'';
+  const ss=document.getElementById('f'+type.toLowerCase().replace('partb','pb')+'-s')?.value||'';
+  const sq=(document.getElementById('f'+type.toLowerCase().replace('partb','pb')+'-q')?.value||'').toLowerCase();
+  // fix ids
+  const uid={'SA':'fsa-u','MCQ':'fmcq-u','PARTB':'fpb-u'}[type];
+  const sid={'SA':'fsa-s','MCQ':'fmcq-s','PARTB':'fpb-s'}[type];
+  const qid={'SA':'fsa-q','MCQ':'fmcq-q','PARTB':'fpb-q'}[type];
+  const u=document.getElementById(uid)?.value||'';
+  const s=document.getElementById(sid)?.value||'';
+  const q=(document.getElementById(qid)?.value||'').toLowerCase();
+  return DB.questions.filter(x=>x.type===type&&(!u||x.unit==u)&&(!s||x.source===s)&&(!q||x.text.toLowerCase().includes(q)||x.co.toLowerCase().includes(q)));
+}
+
+function renderSec(type){
+  const cid={'SA':'sa-c','MCQ':'mcq-c','PARTB':'pb-c'}[type];
+  const cont=document.getElementById(cid);
+  const qs=getFiltered(type);
+  if(!qs.length){
+    cont.innerHTML='<div class="empty"><div class="ei">'+(type==='SA'?'📝':type==='MCQ'?'🔘':'📋')+'</div><h3>No '+type+' questions</h3><p>Upload files or add manually</p></div>';
+    return;
+  }
+  let html='';
+  for(let u=1;u<=5;u++){
+    const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)continue;
+    html+='<div class="ub"><div class="uhdr" onclick="toggleU(this)"><div class="unum">'+u+'</div><div class="utitle">Unit '+u+' \u2013 '+(UN[u]||'')+'</div><div class="umeta">'+uqs.length+' question'+(uqs.length>1?'s':'')+'</div><span class="ucaret">\u25bc</span></div><div class="ubody"><div class="tw"><table class="qb"><thead><tr><th>Q.No</th><th>CO</th><th>BTL</th><th>Question</th>'+(type==='MCQ'?'<th style="min-width:200px">Options</th>':'')+'<th>Marks</th><th>Src</th><th>Act</th></tr></thead><tbody>';
+    uqs.forEach((q,i)=>{
+      const kc={'K1':'k1','K2':'k2','K3':'k3','K4':'k4','K5':'k5','K6':'k6'}[q.btl]||'k2';
+      const srcPill='p-'+q.source;
+      const optH=type==='MCQ'&&q.options&&q.options.length?'<td><div class="mcq-opts">'+q.options.map((o,j)=>o?'<div class="mcq-opt"><b>'+'abcd'[j]+')</b> '+esc(o)+'</div>':'').join('')+'</div></td>':'';
+      const imgH=(q.images||[]).map(s=>'<img src="'+s+'" loading="lazy">').join('');
+      html+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;white-space:nowrap">'+esc(q.qno||String(i+1))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:var(--purple)">'+q.co+'</td><td><span class="'+kc+'" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700">'+q.btl+'</span></td><td>'+esc(q.text)+imgH+'</td>'+optH+'<td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;text-align:center">'+q.marks+'</td><td><span class="pill '+srcPill+'">'+q.source.toUpperCase()+'</span></td><td style="white-space:nowrap"><button class="btn bg bsm" onclick="editQ(\''+q.id+'\')" style="padding:4px 8px">&#9998;</button> <button class="btn bd bsm" onclick="delQ(\''+q.id+'\')" style="padding:4px 8px">&#x1F5D1;</button></td></tr>';
+    });
+    html+='</tbody></table></div></div></div>';
+  }
+  cont.innerHTML=html;
+}
+
+function toggleU(el){el.classList.toggle('closed');el.nextElementSibling.classList.toggle('hidden')}
+
+function renderDash(){
+  const total=DB.questions.length;
+  ['t','sa','mcq','pb','ct','es','aqa'].forEach(k=>{
+    const v={t:total,sa:DB.questions.filter(q=>q.type==='SA').length,mcq:DB.questions.filter(q=>q.type==='MCQ').length,pb:DB.questions.filter(q=>q.type==='PARTB').length,ct:DB.questions.filter(q=>q.source==='ct').length,es:DB.questions.filter(q=>q.source==='es').length,aqa:DB.questions.filter(q=>q.source==='aqa').length}[k];
+    document.getElementById('st-'+k).textContent=v;
+  });
+  document.getElementById('st-img').textContent=DB.questions.filter(q=>q.images&&q.images.length>0).length;
+  document.getElementById('hbadge-cnt').textContent=total+' Questions';
+  document.getElementById('dash-info').textContent=DB.sub.subject?(DB.sub.code||'')+' \u2013 '+DB.sub.subject+' | '+(DB.sub.dept||'ECE')+' | '+(DB.sub.semester||''):'Upload files to begin';
+
+  if(total){
+    const T={1:'Sequential Circuits',2:'Asynchronous Sequential',3:'Testing',4:'PLD Design',5:'Digital Systems'};
+    let rows='';
+    for(let u=1;u<=5;u++){
+      const uqs=DB.questions.filter(q=>q.unit==u);if(!uqs.length)continue;
+      const bw=Math.round(uqs.length/total*100);
+      rows+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">Unit '+u+'</td><td style="color:var(--ice)">'+T[u]+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--teal)">'+uqs.filter(q=>q.type==='SA').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--purple)">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+uqs.length+'</td><td><div style="background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;height:10px"><div style="background:linear-gradient(90deg,var(--purple),var(--teal));height:100%;width:'+bw+'%"></div></div></td></tr>';
+    }
+    document.getElementById('unit-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>Unit</th><th>Topic</th><th style="color:var(--teal)">SA</th><th style="color:var(--gold)">MCQ</th><th style="color:var(--purple)">Part B</th><th>Total</th><th style="min-width:120px">Distribution</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+
+    const KS=['K1','K2','K3','K4','K5','K6'],KC={'K1':'#40d080','K2':'#60b0f0','K3':'#f0c060','K4':'#f07060','K5':'#e060f0','K6':'#f07060'};
+    let crow='';
+    for(let co=1;co<=5;co++){const cqs=DB.questions.filter(q=>q.co==='CO'+co);if(!cqs.length)continue;crow+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;'+(n?'color:'+KC[k]+';font-weight:700':'')+'">'+(n||'\u2013')+'</td>';}).join('')+'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:700">'+cqs.length+'</td></tr>';}
+    document.getElementById('co-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>CO</th>'+KS.map(k=>'<th style="color:'+KC[k]+'">'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+crow+'</tbody></table></div>';
+  }
+}
+
+function updateCounts(){
+  document.getElementById('nc-sa').textContent=DB.questions.filter(q=>q.type==='SA').length;
+  document.getElementById('nc-mcq').textContent=DB.questions.filter(q=>q.type==='MCQ').length;
+  document.getElementById('nc-pb').textContent=DB.questions.filter(q=>q.type==='PARTB').length;
+}
+
+// ═══════════════════════════════════════
+// CRUD
+// ═══════════════════════════════════════
+function delQ(id){if(!confirm('Delete this question?'))return;DB.questions=DB.questions.filter(q=>q.id!==id);updateCounts();renderAll();toast('Deleted','warn');}
+function editQ(id){
+  const q=DB.questions.find(x=>x.id===id);if(!q)return;
+  document.getElementById('mtitle').textContent='Edit Question';
+  document.getElementById('mbody').innerHTML='<div class="fg"><div class="fi"><label>CO</label><select id="ef-co">'+[1,2,3,4,5].map(n=>'<option value="CO'+n+'"'+(q.co==='CO'+n?' selected':'')+'>CO'+n+'</option>').join('')+'</select></div><div class="fi"><label>BTL</label><select id="ef-btl">'+[1,2,3,4,5,6].map(n=>'<option value="K'+n+'"'+(q.btl==='K'+n?' selected':'')+'>K'+n+'</option>').join('')+'</select></div><div class="fi"><label>Unit</label><select id="ef-unit">'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(q.unit==n?' selected':'')+'>Unit '+n+'</option>').join('')+'</select></div><div class="fi"><label>Marks</label><select id="ef-marks">'+[2,8,16].map(m=>'<option value="'+m+'"'+(q.marks==m?' selected':'')+'> '+m+'</option>').join('')+'</select></div><div class="fi full"><label>Question Text</label><textarea id="ef-txt" style="min-height:100px">'+esc(q.text)+'</textarea></div>'+(q.images&&q.images.length?'<div class="fi full"><label>Images</label>'+q.images.map(s=>'<img src="'+s+'" style="max-width:200px;border-radius:6px;margin:4px">').join('')+'</div>':'')+'</div><div class="bg2" style="margin-top:14px"><button class="btn bp" onclick="saveEdit(\''+id+'\')">💾 Save</button><button class="btn bg" onclick="closeModal()">Cancel</button></div>';
+  document.getElementById('modal').classList.add('open');
+}
+function saveEdit(id){
+  const q=DB.questions.find(x=>x.id===id);if(!q)return;
+  q.co=document.getElementById('ef-co').value;q.btl=document.getElementById('ef-btl').value;
+  q.unit=document.getElementById('ef-unit').value;q.marks=parseInt(document.getElementById('ef-marks').value);
+  q.text=document.getElementById('ef-txt').value;
+  closeModal();updateCounts();renderAll();toast('Updated!','ok');
+}
+function closeModal(){document.getElementById('modal').classList.remove('open');}
+
+// ═══════════════════════════════════════
+// MANUAL ADD
+// ═══════════════════════════════════════
+function updateMF(){
+  const t=document.getElementById('mf-type').value;
+  document.getElementById('mf-opts').style.display=t==='MCQ'?'block':'none';
+  document.getElementById('mf-marks').value=t==='PARTB'?'16':'2';
+}
+function handleImgs(e){
+  [...e.target.files].forEach(f=>{const r=new FileReader();r.onload=ev=>{mImgs.push(ev.target.result);renderMImgs();};r.readAsDataURL(f);});
+  e.target.value='';
+}
+function renderMImgs(){document.getElementById('mf-imgs').innerHTML=mImgs.map((s,i)=>'<div class="ithumb"><img src="'+s+'"><button class="ri" onclick="removeMImg('+i+')">&#x2715;</button></div>').join('');}
+function removeMImg(i){mImgs.splice(i,1);renderMImgs();}
+function openAdd(t){nav('add',document.querySelectorAll('.ni')[6]);document.getElementById('mf-type').value=t;updateMF();}
+function saveManual(){
+  const txt=document.getElementById('mf-q').value.trim();
+  if(!txt){toast('Question text required!','err');return;}
+  const type=document.getElementById('mf-type').value;
+  let opts=[],correct='';
+  if(type==='MCQ'){opts=['oa','ob','oc','od'].map(id=>document.getElementById(id).value);const r=document.querySelector('input[name="corr"]:checked');correct=r?r.value:'';}
+  DB.questions.push({id:'manual_'+Date.now(),type,unit:document.getElementById('mf-unit').value,co:document.getElementById('mf-co').value,btl:document.getElementById('mf-btl').value,marks:parseInt(document.getElementById('mf-marks').value),qno:document.getElementById('mf-qno').value,text:txt,options:opts,correct,images:[...mImgs],source:document.getElementById('mf-src').value,filename:'Manual',subject:DB.sub.subject});
+  resetMF();updateCounts();renderAll();toast('Question added!','ok');
+}
+function resetMF(){document.getElementById('mf-q').value='';['oa','ob','oc','od'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.querySelectorAll('input[name="corr"]').forEach(r=>r.checked=false);mImgs=[];renderMImgs();}
+
+// ═══════════════════════════════════════
+// EXPORT — WORD DOCUMENT
+// ═══════════════════════════════════════
+function getExportQs(){
+  let qs=[...DB.questions];
+  const u=document.getElementById('ef-u')?.value||'';
+  const s=document.getElementById('ef-s')?.value||'';
+  const t=document.getElementById('ef-t')?.value||'';
+  if(u)qs=qs.filter(q=>q.unit==u);
+  if(s)qs=qs.filter(q=>q.source===s);
+  if(t)qs=qs.filter(q=>q.type===t);
+  return qs;
+}
+
+async function exportWord(){
+  const qs=getExportQs();
+  if(!qs.length){toast('No questions to export','warn');return;}
+  const wp=document.getElementById('wp'),wf=document.getElementById('wpf'),wm=document.getElementById('wpm');
+  wp.style.display='block';
+  function setP(p,m){wf.style.width=p+'%';wm.textContent=m;}
+  setP(5,'Building document...');
+  const sub=DB.sub;
+  const UT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+  const KS=['K1','K2','K3','K4','K5','K6'];
+
+  function tableSection(title,typeKey){
+    const tqs=qs.filter(q=>q.type===typeKey);if(!tqs.length)return'';
+    let h='<h1 style="font-family:Arial,sans-serif;color:#1A237E;font-size:14pt;border-bottom:2pt solid #1A237E;padding-bottom:4pt;margin-top:18pt;page-break-before:always">'+title+'</h1>';
+    for(let u=1;u<=5;u++){
+      const uqs=tqs.filter(q=>q.unit==u);if(!uqs.length)continue;
+      h+='<h2 style="font-family:Arial,sans-serif;color:#283593;font-size:12pt;margin-top:12pt;margin-bottom:6pt">Unit '+u+' \u2013 '+UT[u]+'</h2>';
+      h+='<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9;font-family:\'Times New Roman\',serif"><thead><tr style="background:#1A237E;color:white"><th width="5%">Q.No</th><th width="6%">CO</th><th width="6%">BTL</th><th>Question</th>'+(typeKey==='MCQ'?'<th width="26%">Options</th>':'')+'<th width="6%">Marks</th><th width="5%">Src</th></tr></thead><tbody>';
+      uqs.forEach((q,i)=>{
+        const bg=i%2===0?'#F5F7FF':'#FFFFFF';
+        const imgH=(q.images||[]).map(s=>'<br><img src="'+s+'" style="max-width:220pt;max-height:120pt;display:block;margin:4pt 0">').join('');
+        const optH=typeKey==='MCQ'&&q.options&&q.options.length?'<td style="vertical-align:top;font-size:9pt">'+q.options.map((o,j)=>o?'<div><b style="color:#006D77">'+'abcd'[j]+')</b> '+esc(o)+'</div>':'').join('')+'</td>':'';
+        h+='<tr style="background:'+bg+'"><td align="center" style="font-weight:bold">'+esc(q.qno||String(i+1))+'</td><td align="center" style="font-weight:bold;color:#1A237E">'+q.co+'</td><td align="center" style="font-weight:bold;color:#006D77">'+q.btl+'</td><td>'+esc(q.text).replace(/\n/g,'<br>')+imgH+'</td>'+optH+'<td align="center" style="font-weight:bold">'+q.marks+'</td><td align="center" style="font-size:8pt">'+q.source.toUpperCase()+'</td></tr>';
+      });
+      h+='</tbody></table>';
+    }
+    return h;
+  }
+
+  setP(20,'Part A Short Answer...');
+  const saH=tableSection('Part A \u2013 Short Answer Questions (2 Marks Each)','SA');
+  setP(45,'Part A MCQ...');
+  const mcqH=tableSection('Part A \u2013 MCQ Questions (2 Marks Each)','MCQ');
+  setP(70,'Part B...');
+  const pbH=tableSection('Part B Questions (8 / 16 Marks)','PARTB');
+
+  setP(85,'Building summary...');
+  const total=qs.length;
+  const coStmts=['Construct the synchronous sequential circuits.','Solve hazards and design asynchronous sequential circuits.','Relate the testing procedure for combinational circuit and PLA.','Make use of PLD to construct the synchronous circuit design.','Design and use programming tools for implementing digital circuits.'];
+  const utRows=([1,2,3,4,5]).map(u=>{const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)return'';return'<tr><td style="font-weight:bold;color:#1A237E;background:#E8EAF6">Unit '+u+'</td><td>'+UT[u]+'</td><td align="center">'+uqs.filter(q=>q.type==='SA').length+'</td><td align="center">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td align="center">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td align="center" style="font-weight:bold">'+uqs.length+'</td></tr>';}).join('');
+  const coRows=([1,2,3,4,5]).map(co=>{const cqs=qs.filter(q=>q.co==='CO'+co);if(!cqs.length)return'';return'<tr><td style="font-weight:bold;background:#E8EAF6">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td align="center">'+(n||'\u2013')+'</td>';}).join('')+'<td align="center" style="font-weight:bold">'+cqs.length+'</td></tr>';}).join('');
+
+  const fullHTML='<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:11pt;margin:0}h1,h2,h3{font-family:Arial,sans-serif}table{page-break-inside:avoid}@page{margin:2cm}p{margin:2pt 0}</style><title>'+esc(sub.code||'QB')+' Question Bank</title></head><body>'
+  +'<div style="text-align:center;border-bottom:2pt solid #1A237E;padding-bottom:8pt;margin-bottom:10pt">'
+  +'<h1 style="font-family:Arial,sans-serif;color:#1A237E;font-size:16pt;margin:0">'+(sub.code||'VEC311')+' \u2013 '+(sub.subject||'Digital VLSI Design and Technology')+'</h1>'
+  +'<p style="color:#006D77;font-size:11pt;font-weight:bold;margin:4pt 0">QUESTION BANK &nbsp;|&nbsp; Department of '+(sub.dept||'ECE')+' &nbsp;|&nbsp; '+(sub.semester||'')+'</p>'
+  +'<p style="font-size:9pt;color:#777">Generated: '+new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})+' &nbsp;|&nbsp; Total Questions: '+total+'</p></div>'
+  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:10pt">Course Outcomes</h2>'
+  +'<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#1A237E;color:white"><th width="8%">CO</th><th>Statement</th></tr></thead><tbody>'
+  +coStmts.map((s,i)=>'<tr><td align="center" style="font-weight:bold;background:#E8EAF6">CO'+(i+1)+'</td><td>'+s+'</td></tr>').join('')
+  +'</tbody></table>'
+  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">Summary</h2>'
+  +'<table border="1" cellpadding="5" cellspacing="0" style="width:50%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#1A237E;color:white"><th>Total</th><th>Short Answer</th><th>MCQ</th><th>Part B</th></tr></thead><tbody><tr><td align="center" style="font-weight:bold;font-size:14pt">'+total+'</td><td align="center" style="color:#006D77;font-weight:bold">'+qs.filter(q=>q.type==='SA').length+'</td><td align="center" style="color:#E65100;font-weight:bold">'+qs.filter(q=>q.type==='MCQ').length+'</td><td align="center" style="color:#1A237E;font-weight:bold">'+qs.filter(q=>q.type==='PARTB').length+'</td></tr></tbody></table>'
+  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">Unit-wise Breakdown</h2>'
+  +'<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#283593;color:white"><th>Unit</th><th>Topic</th><th>SA</th><th>MCQ</th><th>Part B</th><th>Total</th></tr></thead><tbody>'+utRows+'</tbody></table>'
+  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">CO \u00d7 Bloom\'s Taxonomy Coverage</h2>'
+  +'<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#1A237E;color:white"><th>CO</th>'+KS.map(k=>'<th>'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+coRows+'</tbody></table>'
+  +saH+mcqH+pbH
+  +'</body></html>';
+
+  setP(97,'Downloading...');
+  const blob=new Blob(['\ufeff'+fullHTML],{type:'application/msword;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(sub.code||'QB')+'_QuestionBank.doc';a.click();URL.revokeObjectURL(a.href);
+  setP(100,'Done! File downloaded.');
+  setTimeout(()=>{wp.style.display='none';setP(0,'');},3000);
+  toast('Word document downloaded!','ok');
+}
+
+function exportJSON(){
+  const qs=getExportQs();
+  dl(JSON.stringify({course:DB.sub,exportDate:new Date().toISOString(),total:qs.length,questions:qs},null,2),(DB.sub.code||'QB')+'_QuestionBank.json','application/json');
+  toast('JSON exported!','ok');
+}
+function exportCSV(type){
+  const qs=type?DB.questions.filter(q=>q.type===type):getExportQs();
+  const h='Q.No,CO,BTL,Unit,Type,Question,OptionA,OptionB,OptionC,OptionD,Marks,Source,File';
+  const rows=qs.map((q,i)=>[i+1,q.co,q.btl,'Unit '+q.unit,q.type,'"'+(q.text||'').replace(/"/g,'""').replace(/\n/g,' ')+'"','"'+(q.options&&q.options[0]||'').replace(/"/g,'""')+'"','"'+(q.options&&q.options[1]||'').replace(/"/g,'""')+'"','"'+(q.options&&q.options[2]||'').replace(/"/g,'""')+'"','"'+(q.options&&q.options[3]||'').replace(/"/g,'""')+'"',q.marks,q.source,q.filename].join(','));
+  dl(h+'\n'+rows.join('\n'),(DB.sub.code||'QB')+'_'+(type||'All')+'.csv','text/csv');
+  toast('CSV exported!','ok');
+}
+function exportCSVAll(){exportCSV('');}
+function dl(content,filename,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+
+// ═══════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════
+function toast(msg,type){
+  const c=document.getElementById('toasts');const t=document.createElement('div');t.className='toast '+(type||'');
+  t.innerHTML=(type==='ok'?'✅':type==='err'?'❌':type==='warn'?'⚠️':'ℹ️')+' '+String(msg).replace(/</g,'&lt;');
+  c.appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),300);},3500);
+}
+document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();exportJSON();}});
+setTimeout(()=>toast('Upload .docx files in the Upload tab to begin!',''),900);
+</script>
+</body>
+</html>
