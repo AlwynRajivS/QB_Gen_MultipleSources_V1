@@ -319,7 +319,7 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
       <select id="ef-t"><option value="">All Types</option><option value="SA">Short Answer</option><option value="MCQ">MCQ</option><option value="PARTB">Part B</option></select>
     </div>
     <div class="exp-grid">
-      <div class="exc" onclick="exportWord()"><div class="ei">📝</div><h4>Word Document (.doc)</h4><p>Full question bank with embedded images, CO/BTL matrix, unit tables — opens in MS Word</p></div>
+      <div class="exc" onclick="exportWord()"><div class="ei">📝</div><h4>Word Document</h4><p>Full question bank with embedded images, CO/BTL matrix, unit tables</p></div>
       <div class="exc" onclick="exportJSON()"><div class="ei">📋</div><h4>JSON Export</h4><p>Complete data with base64 images for re-import</p></div>
       <div class="exc" onclick="exportCSVAll()"><div class="ei">📊</div><h4>CSV / Excel</h4><p>Spreadsheet format for analysis</p></div>
       <div class="exc" onclick="duplicateCheck()"><div class="ei">🔍</div><h4>Duplicate Check</h4><p>Find and remove duplicate questions</p></div>
@@ -347,10 +347,9 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
 // ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
-const UN_DEFAULT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
-// Pre-populate unit topics with defaults so they always show
-const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{1:UN_DEFAULT[1],2:UN_DEFAULT[2],3:UN_DEFAULT[3],4:UN_DEFAULT[4],5:UN_DEFAULT[5]}}};
+const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}}};
 let mImgs=[];
+const UN_DEFAULT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
 function getUN(u){return DB.sub.unit_topics[String(u)]||UN_DEFAULT[u]||'Unit '+u;}
 const COU={'CO1':'1','CO2':'2','CO3':'3','CO4':'4','CO5':'5'};
 
@@ -391,7 +390,7 @@ function clearAll(){
   if(DB.questions.length>0&&!confirm('This will also clear all '+DB.questions.length+' parsed questions. Continue?'))return;
   DB.files={ct:[],es:[],aqa:[]};
   DB.questions=[];
-  DB.sub={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{1:UN_DEFAULT[1],2:UN_DEFAULT[2],3:UN_DEFAULT[3],4:UN_DEFAULT[4],5:UN_DEFAULT[5]}};
+  DB.sub={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}};
   ['ct','es','aqa'].forEach(c=>{renderChips(c);document.getElementById('pb-'+c).style.display='none'});
   document.getElementById('log-wrap').style.display='none';
   document.getElementById('btn-gw').disabled=true;
@@ -995,12 +994,28 @@ async function exportWord(){
   const sub=DB.sub;
   const KS=['K1','K2','K3','K4','K5','K6'];
 
-  setP(15,'Processing images...');
+  // ── Collect all images and assign CID (Content-ID) for MHTML ──
+  const imageMap=new Map(); // dataUrl -> {cid, mime, b64}
+  let imgIdx=0;
+  function getImgCid(dataUrl){
+    if(!dataUrl)return null;
+    if(imageMap.has(dataUrl))return imageMap.get(dataUrl).cid;
+    const m=dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if(!m)return null;
+    const cid='img'+String(++imgIdx).padStart(4,'0')+'@qb';
+    imageMap.set(dataUrl,{cid,mime:m[1],b64:m[2]});
+    return cid;
+  }
 
-  // ── Build image HTML tag using data URI (works in .doc Word HTML export) ──
+  // Pre-register all images
+  qs.forEach(q=>{(q.images||[]).forEach(imgUrl=>getImgCid(imgUrl));});
+  setP(15,'Registering images...');
+
+  // ── Build image HTML tag using cid: scheme (MHTML standard) ──
   function imgTag(dataUrl){
-    if(!dataUrl||!dataUrl.startsWith('data:'))return'';
-    return '<img src="'+dataUrl+'" style="max-width:220pt;max-height:140pt;display:block;margin:4pt 0;border:1px solid #E8EAF6">';
+    const cid=getImgCid(dataUrl);
+    if(!cid)return'';
+    return'<img src="cid:'+cid+'" style="max-width:220pt;max-height:140pt;display:block;margin:4pt 0;border:1px solid #E8EAF6">';
   }
 
   // ── Use actual CO statements from DB ──
@@ -1055,7 +1070,7 @@ async function exportWord(){
   }).join('');
 
   // ── Main HTML body ──
-  const innerContent=''
+  const bodyHTML='<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:11pt;margin:0}h1,h2{font-family:Arial,sans-serif}table{page-break-inside:avoid}@page{margin:2cm}p{margin:2pt 0}</style><title>'+(sub.code||'QB')+' Question Bank</title></head><body>'
   +'<div style="text-align:center;border-bottom:2pt solid #1A237E;padding-bottom:8pt;margin-bottom:10pt">'
   +'<h1 style="font-family:Arial,sans-serif;color:#1A237E;font-size:16pt;margin:0">'+(sub.code||'QB')+' – '+escW(sub.subject||'Question Bank')+'</h1>'
   +'<p style="color:#006D77;font-size:11pt;font-weight:bold;margin:4pt 0">QUESTION BANK &nbsp;|&nbsp; Department of '+escW(sub.dept||'ECE')+' &nbsp;|&nbsp; '+escW(sub.semester||'')+'</p>'
@@ -1068,51 +1083,62 @@ async function exportWord(){
   +'<table border="1" cellpadding="5" cellspacing="0" style="width:50%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#1A237E;color:white"><th>Total</th><th>Short Answer</th><th>MCQ</th><th>Part B</th></tr></thead><tbody><tr><td align="center" style="font-weight:bold;font-size:14pt">'+total+'</td><td align="center" style="color:#006D77;font-weight:bold">'+qs.filter(q=>q.type==='SA').length+'</td><td align="center" style="color:#E65100;font-weight:bold">'+qs.filter(q=>q.type==='MCQ').length+'</td><td align="center" style="color:#1A237E;font-weight:bold">'+qs.filter(q=>q.type==='PARTB').length+'</td></tr></tbody></table>'
   +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">Unit-wise Breakdown</h2>'
   +'<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#283593;color:white"><th>Unit</th><th>Topic</th><th>SA</th><th>MCQ</th><th>Part B</th><th>Total</th></tr></thead><tbody>'+utRows+'</tbody></table>'
-  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">CO \xd7 Bloom\'s Taxonomy Coverage</h2>'
+  +'<h2 style="font-family:Arial,sans-serif;color:#1A237E;font-size:12pt;margin-top:12pt">CO × Bloom\'s Taxonomy Coverage</h2>'
   +'<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9"><thead><tr style="background:#1A237E;color:white"><th>CO</th>'+KS.map(k=>'<th>'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+coRows+'</tbody></table>'
-  +saH+mcqH+pbH;
+  +saH+mcqH+pbH
+  +'</body></html>';
 
-  setP(90,'Embedding images into Word document...');
+  setP(90,'Building MHTML with embedded images...');
 
-  // ── Word-compatible HTML .doc with images as base64 data URIs ──
-  // Word 2007+ opens HTML files with .doc extension and renders data URI images inline
-  const wordHTML='<!DOCTYPE html>\n'
-  +'<html xmlns:o="urn:schemas-microsoft-com:office:office"\n'
-  +'      xmlns:w="urn:schemas-microsoft-com:office:word"\n'
-  +'      xmlns="http://www.w3.org/TR/REC-html40">\n'
-  +'<head>\n'
-  +'<meta charset="UTF-8">\n'
-  +'<meta http-equiv="Content-Type" content="text/html; charset=utf-8">\n'
-  +'<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>90</w:Zoom>'
-  +'<w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->\n'
-  +'<style>\n'
-  +'@page { margin: 2cm; }\n'
-  +'body { font-family: "Times New Roman", serif; font-size: 11pt; margin: 0; }\n'
-  +'h1, h2 { font-family: Arial, sans-serif; page-break-after: avoid; }\n'
-  +'table { border-collapse: collapse; page-break-inside: avoid; width: 100%; margin-bottom: 8pt; }\n'
-  +'td, th { padding: 5pt 6pt; border: 1pt solid #C5CAE9; font-size: 10pt; vertical-align: top; }\n'
-  +'thead tr { background: #1A237E !important; color: white !important; -webkit-print-color-adjust: exact; }\n'
-  +'img { display: block; max-width: 200pt; max-height: 130pt; margin: 4pt 0; border: 1pt solid #E8EAF6; }\n'
-  +'</style>\n'
-  +'<title>'+escW(sub.code||'QB')+' Question Bank</title>\n'
-  +'</head>\n<body>\n'
-  +innerContent
-  +'\n</body>\n</html>';
+  // ── Build MHTML (Multipurpose Internet Mail Extensions HTML) ──
+  // This is what Word reads to get inline images without external links
+  const BOUNDARY='----=_NextPart_QB_'+Date.now();
+  let mhtml='MIME-Version: 1.0\r\n';
+  mhtml+='Content-Type: multipart/related; boundary="'+BOUNDARY+'"; type="text/html"\r\n\r\n';
+  // Part 1: HTML
+  mhtml+='--'+BOUNDARY+'\r\n';
+  mhtml+='Content-Type: text/html; charset="utf-8"\r\n';
+  mhtml+='Content-Transfer-Encoding: quoted-printable\r\n\r\n';
+  mhtml+=qpEncode(bodyHTML)+'\r\n\r\n';
+  // Parts 2+: Images
+  for(const[,{cid,mime,b64}] of imageMap){
+    mhtml+='--'+BOUNDARY+'\r\n';
+    mhtml+='Content-Type: '+mime+'\r\n';
+    mhtml+='Content-Transfer-Encoding: base64\r\n';
+    mhtml+='Content-ID: <'+cid+'>\r\n\r\n';
+    // Split base64 into 76-char lines (MIME standard)
+    mhtml+=b64.replace(/(.{76})/g,'$1\r\n')+'\r\n\r\n';
+  }
+  mhtml+='--'+BOUNDARY+'--\r\n';
 
-  setP(97,'Downloading Word document...');
-  // Use BOM + msword content type for maximum compatibility
-  const blob=new Blob(['\ufeff'+wordHTML],{type:'application/msword;charset=utf-8'});
+  setP(98,'Downloading...');
+  const blob=new Blob([mhtml],{type:'message/rfc822'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=(sub.code||'QB')+'_QuestionBank.doc';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-  setP(100,'✅ Word document downloaded! Open with Microsoft Word.');
+  a.download=(sub.code||'QB')+'_QuestionBank.mht';
+  a.click();URL.revokeObjectURL(a.href);
+  setP(100,'Done! File downloaded — open with Microsoft Word.');
   setTimeout(()=>{wp.style.display='none';setP(0,'');},4000);
-  const imgCount=qs.reduce((s,q)=>s+(q.images||[]).length,0);
-  toast('Word .doc downloaded! '+imgCount+' image(s) embedded.','ok');
+  toast('Word document downloaded! ('+imageMap.size+' images embedded)','ok');
+}
+
+// Quoted-printable encoder (keeps HTML readable, handles non-ASCII)
+function qpEncode(str){
+  // For our use case, UTF-8 chars just need = encoding, but most HTML is ASCII
+  // Simple approach: encode anything > 127
+  let out='';
+  const bytes=new TextEncoder().encode(str);
+  let lineLen=0;
+  for(const b of bytes){
+    let ch;
+    if(b===13||b===10){ch=String.fromCharCode(b);lineLen=0;}
+    else if(b===61){ch='=3D';lineLen+=3;}
+    else if(b<32||b>126){ch='='+b.toString(16).toUpperCase().padStart(2,'0');lineLen+=3;}
+    else{ch=String.fromCharCode(b);lineLen++;}
+    if(lineLen>=75&&b!==13&&b!==10){out+='=\r\n';lineLen=ch.length;}
+    out+=ch;
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════
@@ -1205,9 +1231,6 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateCheck();}
 });
 (function(){
-  // Render unit topic fields on page load so defaults are visible
-  renderUnitTopicFields();
-  renderCoStmtFields();
   setTimeout(()=>toast('Upload .docx files to begin! | Ctrl+S = Save JSON | Ctrl+D = Dup Check',''),900);
 })();
 </script>
