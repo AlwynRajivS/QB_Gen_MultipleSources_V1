@@ -165,7 +165,11 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
 <div class="page active" id="page-dash">
   <div class="ph">
     <div><div class="ph-title">Dashboard</div><div class="ph-sub" id="dash-info">Upload files to begin</div></div>
-    <button class="btn bp" onclick="nav('upload',document.querySelectorAll('.ni')[1])">📤 Upload Files</button>
+    <div class="bg2">
+      <button class="btn bp" onclick="nav('upload',document.querySelectorAll('.ni')[1])">📤 Upload Files</button>
+      <button class="btn bg bsm" onclick="duplicateCheck()" title="Find & remove duplicate questions">🔍 Dup Check</button>
+      <button class="btn bg bsm" onclick="importJSON()" title="Import from JSON export">📂 Import JSON</button>
+    </div>
   </div>
   <div class="sg">
     <div class="sc"><div class="sn" id="st-t" style="color:var(--purple)">0</div><div class="sl">Total Questions</div></div>
@@ -193,6 +197,18 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
       <div class="fi"><label>Semester</label><input type="text" id="sub-sem" placeholder="e.g. Fifth Semester"></div>
     </div>
   </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hdr"><span>🎯</span><div class="card-title">CO Statements <span style="font-weight:400;color:var(--steel)">(Auto-detected from documents)</span></div></div>
+    <div id="co-stmt-grid" class="fg">
+      <div class="fi full" style="color:var(--steel);font-size:12px;padding:6px 0">Upload and process files — CO statements will be auto-detected and appear here for editing.</div>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-hdr"><span>📚</span><div class="card-title">Unit Topics / Titles <span style="font-weight:400;color:var(--steel)">(Auto-detected from syllabus lines)</span></div></div>
+    <div id="unit-topic-grid" class="fg">
+      <div class="fi full" style="color:var(--steel);font-size:12px;padding:6px 0">Upload and process files — unit topic titles will be auto-detected and appear here for editing.</div>
+    </div>
+  </div>
   <div class="upload-grid">
     <div class="uz" id="uz-ct" ondragover="dov(event,'ct')" ondragleave="dol('ct')" ondrop="ddr(event,'ct')">
       <input type="file" multiple accept=".docx" onchange="fsel(event,'ct')">
@@ -216,6 +232,7 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
   <div class="bg2" style="margin-bottom:14px">
     <button class="btn bp" onclick="processAll()" id="btn-proc">⚙️ Process All Files</button>
     <button class="btn bs" onclick="nav('export',document.querySelectorAll('.ni')[7])" id="btn-gw" disabled>📝 Generate Word Document</button>
+    <button class="btn bg bsm" onclick="importJSON()" title="Re-import a previously exported JSON">📂 Import JSON</button>
     <button class="btn bg" onclick="clearAll()">🗑️ Clear All</button>
   </div>
   <div id="log-wrap" style="display:none" class="card">
@@ -320,6 +337,7 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
       <div class="exc" onclick="exportWord()"><div class="ei">📝</div><h4>Word Document</h4><p>Full question bank with images, CO/BTL matrix, unit tables</p></div>
       <div class="exc" onclick="exportJSON()"><div class="ei">📋</div><h4>JSON Export</h4><p>Complete data with base64 images for re-import</p></div>
       <div class="exc" onclick="exportCSVAll()"><div class="ei">📊</div><h4>CSV / Excel</h4><p>Spreadsheet format for analysis</p></div>
+      <div class="exc" onclick="duplicateCheck()"><div class="ei">🔍</div><h4>Duplicate Check</h4><p>Find and remove duplicate questions</p></div>
       <div class="exc" onclick="window.print()"><div class="ei">🖨️</div><h4>Print</h4><p>Print the current question bank view</p></div>
     </div>
     <div id="wp" style="display:none;margin-top:14px">
@@ -344,9 +362,11 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
 // ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
-const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:''}};
+const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}}};
 let mImgs=[];
-const UN={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+// Default unit topic names — overwritten by auto-detected values from uploaded docs
+const UN_DEFAULT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+function getUN(u){return DB.sub.unit_topics[String(u)]||UN_DEFAULT[u]||'Unit '+u;}
 const COU={'CO1':'1','CO2':'2','CO3':'3','CO4':'4','CO5':'5'};
 
 // ═══════════════════════════════════════
@@ -383,26 +403,41 @@ function renderChips(cat){
   zone.classList.toggle('filled',DB.files[cat].length>0);
 }
 function clearAll(){
+  if(DB.questions.length>0&&!confirm('This will also clear all '+DB.questions.length+' parsed questions. Continue?'))return;
   DB.files={ct:[],es:[],aqa:[]};
+  DB.questions=[];
+  DB.sub={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}};
   ['ct','es','aqa'].forEach(c=>{renderChips(c);document.getElementById('pb-'+c).style.display='none'});
   document.getElementById('log-wrap').style.display='none';
-  toast('Cleared all files','warn');
+  document.getElementById('btn-gw').disabled=true;
+  document.getElementById('hbadge-sub').textContent='No Subject';
+  updateCounts();renderAll();
+  toast('Cleared all files and questions','warn');
 }
 
 // ═══════════════════════════════════════
 // DOCX PARSER — pure browser via JSZip
 // ═══════════════════════════════════════
-const R_NS='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-const PKG_NS='http://schemas.openxmlformats.org/package/2006/relationships';
 
 async function buildRelMap(zip){
   const m={};
-  try{
-    const x=await zip.files['word/_rels/document.xml.rels'].async('text');
-    new DOMParser().parseFromString(x,'text/xml').querySelectorAll('Relationship').forEach(r=>{
-      m[r.getAttribute('Id')]=r.getAttribute('Target').replace(/.*\//,'');
-    });
-  }catch(e){}
+  const relsFiles=['word/_rels/document.xml.rels','word/_rels/document.xml.rels'.toLowerCase()];
+  // Also look for any _rels file in word/
+  for(const[p]of Object.entries(zip.files)){
+    if(p.toLowerCase().includes('word/_rels/')&&p.toLowerCase().endsWith('.rels'))relsFiles.push(p);
+  }
+  for(const relsPath of [...new Set(relsFiles)]){
+    if(!zip.files[relsPath])continue;
+    try{
+      const x=await zip.files[relsPath].async('text');
+      new DOMParser().parseFromString(x,'text/xml').querySelectorAll('Relationship').forEach(r=>{
+        const tgt=r.getAttribute('Target')||'';
+        const fn=tgt.includes('/')?tgt.split('/').pop():tgt;
+        m[r.getAttribute('Id')]=fn;
+      });
+      break;
+    }catch(e){}
+  }
   return m;
 }
 
@@ -428,7 +463,7 @@ function getCellParas(tc){
       if(c.localName==='p'){
         let text='';
         const rids=[];
-        function wt(n){for(const x of n.childNodes){if(x.localName==='t')text+=x.textContent||'';else if(x.localName==='blip'){for(const a of x.attributes)if(a.localName==='embed')rids.push(a.value);}else if(x.localName==='imagedata'){const rid=x.getAttributeNS(R_NS,'id')||'';if(rid)rids.push(rid);}else wt(x);}}
+        function wt(n){for(const x of n.childNodes){if(x.localName==='t')text+=x.textContent||'';else if(x.localName==='blip'){const rid=x.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed')||x.getAttribute('r:embed')||x.getAttribute('embed')||'';if(rid)rids.push(rid);}else if(x.localName==='imagedata'){const rid=x.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id')||x.getAttribute('r:id')||'';if(rid)rids.push(rid);}else wt(x);}}
         wt(c);
         result.push({text:text.trim(),rids});
       }else walk(c);
@@ -442,11 +477,19 @@ function getCellText(tc){return getCellParas(tc).map(p=>p.text).filter(Boolean).
 
 function getCellImgs(tc,rm,im){
   const imgs=[];const seen=new Set();
+  const NS_R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   function walk(node){
     for(const c of node.childNodes){
       if(c.localName==='tbl')continue;
-      if(c.localName==='blip'){for(const a of c.attributes){if(a.localName==='embed'){const fn=rm[a.value];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}}}
-      else if(c.localName==='imagedata'){const rid=c.getAttributeNS(R_NS,'id')||'';if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}}
+      if(c.localName==='blip'){
+        // Try both namespaced and non-namespaced embed
+        const rid=c.getAttributeNS(NS_R,'embed')||c.getAttribute('r:embed')||c.getAttribute('embed')||'';
+        if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}
+      }
+      else if(c.localName==='imagedata'){
+        const rid=c.getAttributeNS(NS_R,'id')||c.getAttribute('r:id')||'';
+        if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}
+      }
       else walk(c);
     }
   }
@@ -500,10 +543,10 @@ function detectType(marks,paras){
 }
 
 function detectSubject(xmlDoc){
-  const info={subject:'',code:'',dept:'ECE',semester:''};
+  const info={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{}};
   const texts=[];
   xmlDoc.querySelectorAll('*').forEach(el=>{if(el.localName==='t'){const t=(el.textContent||'').trim();if(t.length>2)texts.push(t);}});
-  const uniq=[...new Set(texts)].slice(0,120);
+  const uniq=[...new Set(texts)].slice(0,200);
   for(const t of uniq){
     if(!info.code){const cm=t.match(/[A-Z]{2,4}\d{3}/);if(cm)info.code=cm[0];}
     if(!info.subject&&/Digital VLSI/i.test(t))info.subject='Digital VLSI Design and Technology';
@@ -513,6 +556,40 @@ function detectSubject(xmlDoc){
     if(!info.subject&&t.length>25&&/Design|Technology|Circuit|Signal|Network|Electron/i.test(t)&&!/Exam|Assessment|Semester|Dept|Regulation|Internal|Answer/i.test(t))info.subject=t.slice(0,80);
   }
   if(!info.subject)info.subject='Unknown Subject';
+
+  // ── Extract CO Statements ──────────────────────────────────
+  // Scan raw text lines (not deduped) for CO label + next line = statement
+  const rawTexts=[];
+  xmlDoc.querySelectorAll('*').forEach(el=>{if(el.localName==='t'){const t=(el.textContent||'').trim();if(t)rawTexts.push(t);}});
+  const allLines=rawTexts.slice(0,300);
+  for(let i=0;i<allLines.length;i++){
+    const line=allLines[i];
+    // Bare CO label: "CO1", "CO 2"
+    const bare=line.match(/^CO\s*([1-5])\s*$/i);
+    if(bare){
+      const key='CO'+bare[1];
+      if(!info.co_statements[key]){
+        let j=i+1;
+        while(j<allLines.length&&!allLines[j].trim())j++;
+        if(j<allLines.length){
+          const stmt=allLines[j].trim();
+          if(!/^CO\s*[1-5]\s*$/i.test(stmt)&&stmt.length>5){
+            info.co_statements[key]=stmt;
+            i=j;continue;
+          }
+        }
+      }
+    }
+    // Inline: "CO1: statement" or "CO1 – statement"
+    const inl=line.match(/^CO\s*([1-5])\s*[:\u2013\-]\s*(.+)/i);
+    if(inl){const key='CO'+inl[1];if(!info.co_statements[key])info.co_statements[key]=inl[2].trim();}
+    // Unit topic: "Syllabus: Unit -1 Sequential Circuit Design"
+    const syl=line.match(/Syllabus:\s*Unit\s*[-\u2013]?\s*([1-5])\s+(.+)/i);
+    if(syl&&!info.unit_topics[syl[1]])info.unit_topics[syl[1]]=syl[2].trim();
+    // Unit topic: "Unit -1: Title" or "Unit–1 – Title"
+    const utop=line.match(/^Unit\s*[-\u2013]?\s*([1-5])\s*[:\u2013\-|]\s*(.+)/i);
+    if(utop&&!info.unit_topics[utop[1]])info.unit_topics[utop[1]]=utop[2].trim();
+  }
   return info;
 }
 
@@ -665,6 +742,9 @@ async function processAll(){
       try{
         const{qs,subInfo}=await parseDocx(f,cat);
         if(!DB.sub.subject&&subInfo.subject){DB.sub=subInfo;updateSubjectFields(subInfo);}
+        // Merge co_statements and unit_topics (don't overwrite existing keys)
+        if(subInfo.co_statements){Object.entries(subInfo.co_statements).forEach(([k,v])=>{if(!DB.sub.co_statements[k])DB.sub.co_statements[k]=v;});}
+        if(subInfo.unit_topics){Object.entries(subInfo.unit_topics).forEach(([k,v])=>{if(!DB.sub.unit_topics[k])DB.sub.unit_topics[k]=v;});}
         let added=0;
         qs.forEach(q=>{
           const key=q.co+'|'+q.text.slice(0,50).toLowerCase().trim();
@@ -688,15 +768,40 @@ async function processAll(){
   btn.disabled=false;btn.textContent='⚙️ Process All Files';
   document.getElementById('btn-gw').disabled=false;
   document.getElementById('hbadge-sub').textContent=(DB.sub.code||'QB')+(DB.sub.subject?' – '+DB.sub.subject.slice(0,25):'');
+  renderCoStmtFields();renderUnitTopicFields();
   updateCounts();renderAll();
   toast('Processed! '+DB.questions.length+' questions ('+totalNew+' new)','ok');
 }
 
+function renderCoStmtFields(){
+  const wrap=document.getElementById('co-stmt-grid');if(!wrap)return;
+  wrap.innerHTML='';
+  for(let n=1;n<=5;n++){
+    const key='CO'+n;
+    const val=DB.sub.co_statements[key]||'';
+    const row=document.createElement('div');row.className='fi full';
+    row.innerHTML=`<label>CO${n} Statement</label><input type="text" id="cos-${key}" value="${val.replace(/"/g,'&quot;')}" placeholder="Auto-detected or enter manually..." oninput="DB.sub.co_statements['${key}']=this.value;renderAll()">`;
+    wrap.appendChild(row);
+  }
+}
+function renderUnitTopicFields(){
+  const wrap=document.getElementById('unit-topic-grid');if(!wrap)return;
+  wrap.innerHTML='';
+  for(let n=1;n<=5;n++){
+    const val=DB.sub.unit_topics[String(n)]||'';
+    const def=UN_DEFAULT[n]||'';
+    const row=document.createElement('div');row.className='fi full';
+    row.innerHTML=`<label>Unit ${n} Topic</label><input type="text" id="ut-${n}" value="${val.replace(/"/g,'&quot;')}" placeholder="${def}" oninput="DB.sub.unit_topics['${n}']=this.value;renderAll()">`;
+    wrap.appendChild(row);
+  }
+}
 function updateSubjectFields(info){
   document.getElementById('sub-name').value=info.subject||'';
   document.getElementById('sub-code').value=info.code||'';
   document.getElementById('sub-dept').value=info.dept||'ECE';
   document.getElementById('sub-sem').value=info.semester||'';
+  renderCoStmtFields();
+  renderUnitTopicFields();
 }
 
 // ═══════════════════════════════════════
@@ -718,10 +823,18 @@ function getFiltered(type){
   return DB.questions.filter(x=>x.type===type&&(!u||x.unit==u)&&(!s||x.source===s)&&(!q||x.text.toLowerCase().includes(q)||x.co.toLowerCase().includes(q)));
 }
 
+function highlight(text,term){
+  if(!term)return esc(text);
+  const safe=term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return esc(text).replace(new RegExp('('+safe+')','gi'),'<mark style="background:rgba(240,192,96,.3);color:var(--gold);border-radius:2px">$1</mark>');
+}
+
 function renderSec(type){
   const cid={'SA':'sa-c','MCQ':'mcq-c','PARTB':'pb-c'}[type];
   const cont=document.getElementById(cid);
   const qs=getFiltered(type);
+  const qid={'SA':'fsa-q','MCQ':'fmcq-q','PARTB':'fpb-q'}[type];
+  const term=(document.getElementById(qid)?.value||'').toLowerCase();
   if(!qs.length){
     cont.innerHTML='<div class="empty"><div class="ei">'+(type==='SA'?'📝':type==='MCQ'?'🔘':'📋')+'</div><h3>No '+type+' questions</h3><p>Upload files or add manually</p></div>';
     return;
@@ -729,17 +842,24 @@ function renderSec(type){
   let html='';
   for(let u=1;u<=5;u++){
     const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)continue;
-    html+='<div class="ub"><div class="uhdr" onclick="toggleU(this)"><div class="unum">'+u+'</div><div class="utitle">Unit '+u+' \u2013 '+(UN[u]||'')+'</div><div class="umeta">'+uqs.length+' question'+(uqs.length>1?'s':'')+'</div><span class="ucaret">\u25bc</span></div><div class="ubody"><div class="tw"><table class="qb"><thead><tr><th>Q.No</th><th>CO</th><th>BTL</th><th>Question</th>'+(type==='MCQ'?'<th style="min-width:200px">Options</th>':'')+'<th>Marks</th><th>Src</th><th>Act</th></tr></thead><tbody>';
+    html+='<div class="ub"><div class="uhdr" onclick="toggleU(this)"><div class="unum">'+u+'</div><div class="utitle">Unit '+u+' \u2013 '+getUN(u)+'</div><div class="umeta">'+uqs.length+' question'+(uqs.length>1?'s':'')+'</div><span class="ucaret">\u25bc</span></div><div class="ubody"><div class="tw"><table class="qb"><thead><tr><th>Q.No</th><th>CO</th><th>BTL</th><th>Question</th>'+(type==='MCQ'?'<th style="min-width:200px">Options</th>':'')+'<th>Marks</th><th>Src</th><th>Act</th></tr></thead><tbody>';
     uqs.forEach((q,i)=>{
       const kc={'K1':'k1','K2':'k2','K3':'k3','K4':'k4','K5':'k5','K6':'k6'}[q.btl]||'k2';
       const srcPill='p-'+q.source;
-      const optH=type==='MCQ'&&q.options&&q.options.length?'<td><div class="mcq-opts">'+q.options.map((o,j)=>o?'<div class="mcq-opt"><b>'+'abcd'[j]+')</b> '+esc(o)+'</div>':'').join('')+'</div></td>':'';
-      const imgH=(q.images||[]).map(s=>'<img src="'+s+'" loading="lazy">').join('');
-      html+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;white-space:nowrap">'+esc(q.qno||String(i+1))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:var(--purple)">'+q.co+'</td><td><span class="'+kc+'" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700">'+q.btl+'</span></td><td>'+esc(q.text)+imgH+'</td>'+optH+'<td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;text-align:center">'+q.marks+'</td><td><span class="pill '+srcPill+'">'+q.source.toUpperCase()+'</span></td><td style="white-space:nowrap"><button class="btn bg bsm" onclick="editQ(\''+q.id+'\')" style="padding:4px 8px">&#9998;</button> <button class="btn bd bsm" onclick="delQ(\''+q.id+'\')" style="padding:4px 8px">&#x1F5D1;</button></td></tr>';
+      const optH=type==='MCQ'&&q.options&&q.options.length?'<td><div class="mcq-opts">'+q.options.map((o,j)=>o?'<div class="mcq-opt"><b>'+'abcd'[j]+')</b> '+highlight(o,term)+'</div>':'').join('')+'</div></td>':'';
+      const imgH=(q.images||[]).length>0?'<div class="imgp" style="margin-top:6px">'+q.images.map((s,ii)=>'<div class="ithumb" style="cursor:pointer" onclick="viewImg(\''+q.id+'\','+ii+')"><img src="'+s+'" loading="lazy" style="max-width:120px;max-height:80px;border-radius:5px;display:block" onerror="this.style.display=\'none\'"></div>').join('')+'</div>':'';
+      html+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;white-space:nowrap">'+esc(q.qno||String(i+1))+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700;color:var(--purple)">'+q.co+'</td><td><span class="'+kc+'" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;font-weight:700">'+q.btl+'</span></td><td>'+highlight(q.text,term)+imgH+'</td>'+optH+'<td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;text-align:center">'+q.marks+'</td><td><span class="pill '+srcPill+'">'+q.source.toUpperCase()+'</span></td><td style="white-space:nowrap"><button class="btn bg bsm" onclick="editQ(\''+q.id+'\')" style="padding:4px 8px" title="Edit">&#9998;</button> <button class="btn bd bsm" onclick="delQ(\''+q.id+'\')" style="padding:4px 8px" title="Delete">&#x1F5D1;</button></td></tr>';
     });
     html+='</tbody></table></div></div></div>';
   }
   cont.innerHTML=html;
+}
+
+function viewImg(qid,idx){
+  const q=DB.questions.find(x=>x.id===qid);if(!q||!q.images[idx])return;
+  document.getElementById('mtitle').textContent='Image Preview';
+  document.getElementById('mbody').innerHTML='<div style="text-align:center"><img src="'+q.images[idx]+'" style="max-width:100%;max-height:70vh;border-radius:8px;margin-bottom:12px"><div class="bg2" style="justify-content:center"><button class="btn bg" onclick="closeModal()">Close</button><a class="btn bs" href="'+q.images[idx]+'" download="image.png">⬇️ Download</a></div></div>';
+  document.getElementById('modal').classList.add('open');
 }
 
 function toggleU(el){el.classList.toggle('closed');el.nextElementSibling.classList.toggle('hidden')}
@@ -755,21 +875,25 @@ function renderDash(){
   document.getElementById('dash-info').textContent=DB.sub.subject?(DB.sub.code||'')+' \u2013 '+DB.sub.subject+' | '+(DB.sub.dept||'ECE')+' | '+(DB.sub.semester||''):'Upload files to begin';
 
   if(total){
-    const T={1:'Sequential Circuits',2:'Asynchronous Sequential',3:'Testing',4:'PLD Design',5:'Digital Systems'};
     let rows='';
     for(let u=1;u<=5;u++){
       const uqs=DB.questions.filter(q=>q.unit==u);if(!uqs.length)continue;
       const bw=Math.round(uqs.length/total*100);
-      rows+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">Unit '+u+'</td><td style="color:var(--ice)">'+T[u]+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--teal)">'+uqs.filter(q=>q.type==='SA').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--purple)">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+uqs.length+'</td><td><div style="background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;height:10px"><div style="background:linear-gradient(90deg,var(--purple),var(--teal));height:100%;width:'+bw+'%"></div></div></td></tr>';
+      rows+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">Unit '+u+'</td><td style="color:var(--ice)">'+getUN(u)+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--teal)">'+uqs.filter(q=>q.type==='SA').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--gold)">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;color:var(--purple)">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700">'+uqs.length+'</td><td><div style="background:rgba(255,255,255,.06);border-radius:4px;overflow:hidden;height:10px"><div style="background:linear-gradient(90deg,var(--purple),var(--teal));height:100%;width:'+bw+'%"></div></div></td></tr>';
     }
     document.getElementById('unit-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>Unit</th><th>Topic</th><th style="color:var(--teal)">SA</th><th style="color:var(--gold)">MCQ</th><th style="color:var(--purple)">Part B</th><th>Total</th><th style="min-width:120px">Distribution</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 
     const KS=['K1','K2','K3','K4','K5','K6'],KC={'K1':'#40d080','K2':'#60b0f0','K3':'#f0c060','K4':'#f07060','K5':'#e060f0','K6':'#f07060'};
     let crow='';
-    for(let co=1;co<=5;co++){const cqs=DB.questions.filter(q=>q.co==='CO'+co);if(!cqs.length)continue;crow+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;'+(n?'color:'+KC[k]+';font-weight:700':'')+'">'+(n||'\u2013')+'</td>';}).join('')+'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:700">'+cqs.length+'</td></tr>';}
-    document.getElementById('co-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>CO</th>'+KS.map(k=>'<th style="color:'+KC[k]+'">'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+crow+'</tbody></table></div>';
-  }
-}
+    for(let co=1;co<=5;co++){
+      const cqs=DB.questions.filter(q=>q.co==='CO'+co);if(!cqs.length)continue;
+      const stmt=DB.sub.co_statements['CO'+co]||'';
+      const stmtCell=stmt?`<td colspan="2" style="color:var(--steel);font-size:11px;font-style:italic;max-width:300px">${stmt}</td>`:'<td colspan="2"></td>';
+      crow+='<tr><td style="font-family:\'JetBrains Mono\',monospace;font-weight:700;color:var(--purple)">CO'+co+'</td>'+stmtCell+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-size:12px;'+(n?'color:'+KC[k]+';font-weight:700':'')+'\">'+(n||'\u2013')+'</td>';}).join('')+'<td style="text-align:center;font-family:\'JetBrains Mono\',monospace;font-weight:700">'+cqs.length+'</td></tr>';
+    }
+    document.getElementById('co-chart').innerHTML='<div class="tw"><table class="qb"><thead><tr><th>CO</th><th colspan="2" style="color:var(--steel)">Statement</th>'+KS.map(k=>'<th style="color:'+KC[k]+'">'+k+'</th>').join('')+'<th>Total</th></tr></thead><tbody>'+crow+'</tbody></table></div>';
+  } // end if(total)
+} // end renderDash
 
 function updateCounts(){
   document.getElementById('nc-sa').textContent=DB.questions.filter(q=>q.type==='SA').length;
@@ -784,15 +908,38 @@ function delQ(id){if(!confirm('Delete this question?'))return;DB.questions=DB.qu
 function editQ(id){
   const q=DB.questions.find(x=>x.id===id);if(!q)return;
   document.getElementById('mtitle').textContent='Edit Question';
-  document.getElementById('mbody').innerHTML='<div class="fg"><div class="fi"><label>CO</label><select id="ef-co">'+[1,2,3,4,5].map(n=>'<option value="CO'+n+'"'+(q.co==='CO'+n?' selected':'')+'>CO'+n+'</option>').join('')+'</select></div><div class="fi"><label>BTL</label><select id="ef-btl">'+[1,2,3,4,5,6].map(n=>'<option value="K'+n+'"'+(q.btl==='K'+n?' selected':'')+'>K'+n+'</option>').join('')+'</select></div><div class="fi"><label>Unit</label><select id="ef-unit">'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(q.unit==n?' selected':'')+'>Unit '+n+'</option>').join('')+'</select></div><div class="fi"><label>Marks</label><select id="ef-marks">'+[2,8,16].map(m=>'<option value="'+m+'"'+(q.marks==m?' selected':'')+'> '+m+'</option>').join('')+'</select></div><div class="fi full"><label>Question Text</label><textarea id="ef-txt" style="min-height:100px">'+esc(q.text)+'</textarea></div>'+(q.images&&q.images.length?'<div class="fi full"><label>Images</label>'+q.images.map(s=>'<img src="'+s+'" style="max-width:200px;border-radius:6px;margin:4px">').join('')+'</div>':'')+'</div><div class="bg2" style="margin-top:14px"><button class="btn bp" onclick="saveEdit(\''+id+'\')">💾 Save</button><button class="btn bg" onclick="closeModal()">Cancel</button></div>';
+  document.getElementById('mbody').innerHTML='<div class="fg">'
+    +'<div class="fi"><label>CO</label><select id="eq-co">'+[1,2,3,4,5].map(n=>'<option value="CO'+n+'"'+(q.co==='CO'+n?' selected':'')+'>CO'+n+'</option>').join('')+'</select></div>'
+    +'<div class="fi"><label>BTL</label><select id="eq-btl">'+[1,2,3,4,5,6].map(n=>'<option value="K'+n+'"'+(q.btl==='K'+n?' selected':'')+'>K'+n+' – '+['Remember','Understand','Apply','Analyse','Evaluate','Create'][n-1]+'</option>').join('')+'</select></div>'
+    +'<div class="fi"><label>Unit</label><select id="eq-unit">'+[1,2,3,4,5].map(n=>'<option value="'+n+'"'+(q.unit==n?' selected':'')+'>Unit '+n+' – '+getUN(n)+'</option>').join('')+'</select></div>'
+    +'<div class="fi"><label>Marks</label><select id="eq-marks">'+[2,8,16].map(m=>'<option value="'+m+'"'+(q.marks==m?' selected':'')+'> '+m+'</option>').join('')+'</select></div>'
+    +'<div class="fi"><label>Type</label><select id="eq-type"><option value="SA"'+(q.type==='SA'?' selected':'')+'>SA</option><option value="MCQ"'+(q.type==='MCQ'?' selected':'')+'>MCQ</option><option value="PARTB"'+(q.type==='PARTB'?' selected':'')+'>Part B</option></select></div>'
+    +'<div class="fi"><label>Source</label><select id="eq-src"><option value="ct"'+(q.source==='ct'?' selected':'')+'>Cycle Test</option><option value="es"'+(q.source==='es'?' selected':'')+'>End Semester</option><option value="aqa"'+(q.source==='aqa'?' selected':'')+'>AQA</option></select></div>'
+    +'<div class="fi full"><label>Question Text</label><textarea id="eq-txt" style="min-height:100px">'+escTxt(q.text)+'</textarea></div>'
+    +(q.images&&q.images.length?'<div class="fi full"><label>Current Images</label><div class="imgp">'+q.images.map((s,i)=>'<div class="ithumb"><img src="'+s+'"><button class="ri" onclick="removeEditImg(\''+id+'\','+i+')">&#x2715;</button></div>').join('')+'</div></div>':'')
+    +'<div class="fi full"><label>Add Images</label><label class="img-area">📷 Click to add images<input type="file" accept="image/*" multiple style="display:none" onchange="handleEditImgs(event,\''+id+'\')"></label></div>'
+    +'</div>'
+    +'<div class="bg2" style="margin-top:14px"><button class="btn bp" onclick="saveEdit(\''+id+'\')">💾 Save</button><button class="btn bg" onclick="closeModal()">Cancel</button></div>';
   document.getElementById('modal').classList.add('open');
 }
 function saveEdit(id){
   const q=DB.questions.find(x=>x.id===id);if(!q)return;
-  q.co=document.getElementById('ef-co').value;q.btl=document.getElementById('ef-btl').value;
-  q.unit=document.getElementById('ef-unit').value;q.marks=parseInt(document.getElementById('ef-marks').value);
-  q.text=document.getElementById('ef-txt').value;
+  q.co=document.getElementById('eq-co').value;
+  q.btl=document.getElementById('eq-btl').value;
+  q.unit=document.getElementById('eq-unit').value;
+  q.marks=parseInt(document.getElementById('eq-marks').value);
+  q.type=document.getElementById('eq-type').value;
+  q.source=document.getElementById('eq-src').value;
+  q.text=document.getElementById('eq-txt').value;
   closeModal();updateCounts();renderAll();toast('Updated!','ok');
+}
+function removeEditImg(id,idx){
+  const q=DB.questions.find(x=>x.id===id);if(!q)return;
+  q.images.splice(idx,1);editQ(id);
+}
+function handleEditImgs(e,id){
+  const q=DB.questions.find(x=>x.id===id);if(!q)return;
+  [...e.target.files].forEach(f=>{const r=new FileReader();r.onload=ev=>{q.images.push(ev.target.result);editQ(id);};r.readAsDataURL(f);});
 }
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 
@@ -844,7 +991,6 @@ async function exportWord(){
   function setP(p,m){wf.style.width=p+'%';wm.textContent=m;}
   setP(5,'Building document...');
   const sub=DB.sub;
-  const UT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
   const KS=['K1','K2','K3','K4','K5','K6'];
 
   function tableSection(title,typeKey){
@@ -852,7 +998,7 @@ async function exportWord(){
     let h='<h1 style="font-family:Arial,sans-serif;color:#1A237E;font-size:14pt;border-bottom:2pt solid #1A237E;padding-bottom:4pt;margin-top:18pt;page-break-before:always">'+title+'</h1>';
     for(let u=1;u<=5;u++){
       const uqs=tqs.filter(q=>q.unit==u);if(!uqs.length)continue;
-      h+='<h2 style="font-family:Arial,sans-serif;color:#283593;font-size:12pt;margin-top:12pt;margin-bottom:6pt">Unit '+u+' \u2013 '+UT[u]+'</h2>';
+      h+='<h2 style="font-family:Arial,sans-serif;color:#283593;font-size:12pt;margin-top:12pt;margin-bottom:6pt">Unit '+u+' \u2013 '+getUN(u)+'</h2>';
       h+='<table border="1" cellpadding="5" cellspacing="0" style="width:100%;border-collapse:collapse;font-size:10pt;border-color:#C5CAE9;font-family:\'Times New Roman\',serif"><thead><tr style="background:#1A237E;color:white"><th width="5%">Q.No</th><th width="6%">CO</th><th width="6%">BTL</th><th>Question</th>'+(typeKey==='MCQ'?'<th width="26%">Options</th>':'')+'<th width="6%">Marks</th><th width="5%">Src</th></tr></thead><tbody>';
       uqs.forEach((q,i)=>{
         const bg=i%2===0?'#F5F7FF':'#FFFFFF';
@@ -875,7 +1021,7 @@ async function exportWord(){
   setP(85,'Building summary...');
   const total=qs.length;
   const coStmts=['Construct the synchronous sequential circuits.','Solve hazards and design asynchronous sequential circuits.','Relate the testing procedure for combinational circuit and PLA.','Make use of PLD to construct the synchronous circuit design.','Design and use programming tools for implementing digital circuits.'];
-  const utRows=([1,2,3,4,5]).map(u=>{const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)return'';return'<tr><td style="font-weight:bold;color:#1A237E;background:#E8EAF6">Unit '+u+'</td><td>'+UT[u]+'</td><td align="center">'+uqs.filter(q=>q.type==='SA').length+'</td><td align="center">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td align="center">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td align="center" style="font-weight:bold">'+uqs.length+'</td></tr>';}).join('');
+  const utRows=([1,2,3,4,5]).map(u=>{const uqs=qs.filter(q=>q.unit==u);if(!uqs.length)return'';return'<tr><td style="font-weight:bold;color:#1A237E;background:#E8EAF6">Unit '+u+'</td><td>'+getUN(u)+'</td><td align="center">'+uqs.filter(q=>q.type==='SA').length+'</td><td align="center">'+uqs.filter(q=>q.type==='MCQ').length+'</td><td align="center">'+uqs.filter(q=>q.type==='PARTB').length+'</td><td align="center" style="font-weight:bold">'+uqs.length+'</td></tr>';}).join('');
   const coRows=([1,2,3,4,5]).map(co=>{const cqs=qs.filter(q=>q.co==='CO'+co);if(!cqs.length)return'';return'<tr><td style="font-weight:bold;background:#E8EAF6">CO'+co+'</td>'+KS.map(k=>{const n=cqs.filter(q=>q.btl===k).length;return'<td align="center">'+(n||'\u2013')+'</td>';}).join('')+'<td align="center" style="font-weight:bold">'+cqs.length+'</td></tr>';}).join('');
 
   const fullHTML='<!DOCTYPE html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:"Times New Roman",serif;font-size:11pt;margin:0}h1,h2,h3{font-family:Arial,sans-serif}table{page-break-inside:avoid}@page{margin:2cm}p{margin:2pt 0}</style><title>'+esc(sub.code||'QB')+' Question Bank</title></head><body>'
@@ -917,8 +1063,53 @@ function exportCSV(type){
   toast('CSV exported!','ok');
 }
 function exportCSVAll(){exportCSV('');}
+function importJSON(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=async e=>{
+    const f=e.target.files[0];if(!f)return;
+    try{
+      const txt=await f.text();
+      const data=JSON.parse(txt);
+      if(!data.questions||!Array.isArray(data.questions)){toast('Invalid JSON format','err');return;}
+      let added=0;
+      data.questions.forEach(q=>{
+        const key=(q.co||'')+'|'+(q.text||'').slice(0,50).toLowerCase().trim();
+        if(!DB.questions.find(x=>(x.co+'|'+x.text.slice(0,50).toLowerCase().trim())===key)){
+          if(!q.id)q.id='imp_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+          DB.questions.push(q);added++;
+        }
+      });
+      if(data.course){
+        if(!DB.sub.subject&&data.course.subject)DB.sub=Object.assign(DB.sub,data.course);
+        if(data.course.co_statements)Object.entries(data.course.co_statements).forEach(([k,v])=>{if(!DB.sub.co_statements[k])DB.sub.co_statements[k]=v;});
+        if(data.course.unit_topics)Object.entries(data.course.unit_topics).forEach(([k,v])=>{if(!DB.sub.unit_topics[k])DB.sub.unit_topics[k]=v;});
+      }
+      document.getElementById('btn-gw').disabled=false;
+      updateCounts();renderAll();renderCoStmtFields();renderUnitTopicFields();
+      toast('Imported '+added+' questions from JSON!','ok');
+    }catch(err){toast('Import failed: '+err.message,'err');}
+  };
+  inp.click();
+}
+function duplicateCheck(){
+  const map={};DB.questions.forEach(q=>{const k=q.text.trim().toLowerCase().slice(0,60);if(!map[k])map[k]=[];map[k].push(q);});
+  const dups=Object.values(map).filter(a=>a.length>1);
+  if(!dups.length){toast('No duplicates found! ✅','ok');return;}
+  let html='<p style="color:var(--steel);font-size:12px;margin-bottom:12px">Found <b style="color:var(--coral)">'+dups.length+'</b> duplicate group(s). Click 🗑️ to remove extras.</p>';
+  dups.forEach(group=>{
+    html+='<div style="background:rgba(240,112,96,.08);border:1px solid rgba(240,112,96,.2);border-radius:8px;padding:10px;margin-bottom:8px">';
+    html+='<div style="font-size:11.5px;color:var(--ice);margin-bottom:6px">'+esc(group[0].text.slice(0,100))+'…</div>';
+    group.forEach((q,i)=>{html+='<div style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--steel);padding:2px 0"><span class="pill p-'+q.source+'">'+q.source.toUpperCase()+'</span> '+q.co+' | '+q.type+' | Unit '+q.unit+(i>0?'<button class="btn bd bsm" style="margin-left:auto;padding:3px 8px" onclick="delQ(\''+q.id+'\');this.closest(\'.modal\').querySelector(\'#mbody\').innerHTML=\'<p style=&quot;color:var(--teal);text-align:center;padding:20px&quot;>✅ Removed. Close &amp; recheck.</p>\'">🗑️ Remove</button>':'<span style="margin-left:auto;color:var(--green);font-size:10px">✓ Keep</span>')+'</div>';});
+    html+='</div>';
+  });
+  document.getElementById('mtitle').textContent='🔍 Duplicate Checker';
+  document.getElementById('mbody').innerHTML=html+'<div class="bg2" style="margin-top:12px"><button class="btn bg" onclick="closeModal()">Close</button></div>';
+  document.getElementById('modal').classList.add('open');
+}
 function dl(content,filename,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+function escTxt(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function escAttr(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ═══════════════════════════════════════
 // UTILS
@@ -929,8 +1120,16 @@ function toast(msg,type){
   c.appendChild(t);setTimeout(()=>{t.style.transition='opacity .3s';t.style.opacity='0';setTimeout(()=>t.remove(),300);},3500);
 }
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();exportJSON();}});
-setTimeout(()=>toast('Upload .docx files in the Upload tab to begin!',''),900);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeModal();
+  if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();if(DB.questions.length)exportJSON();else toast('No questions to save','warn');}
+  if((e.ctrlKey||e.metaKey)&&e.key==='d'){e.preventDefault();duplicateCheck();}
+});
+// Init
+(function(){
+  if(DB.questions.length>0){document.getElementById('btn-gw').disabled=false;}
+  setTimeout(()=>toast('Upload .docx files in the Upload tab to begin! | Ctrl+S = Save JSON | Ctrl+D = Dup Check',''),900);
+})();
 </script>
 </body>
 </html>
