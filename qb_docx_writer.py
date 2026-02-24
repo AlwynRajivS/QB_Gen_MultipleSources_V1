@@ -494,15 +494,15 @@ def build_question_bank(all_questions, subject_info, sources, output_path):
         subject_info.get('semester',''),
         generated_from)
 
-    # CO statements (standard for VEC311)
-    co_statements = {
+    # CO statements — use auto-detected ones from subject_info, fallback to defaults
+    _default_co = {
         'CO1': 'Construct the synchronous sequential circuits.',
         'CO2': 'Solve hazards and design asynchronous sequential circuits.',
         'CO3': 'Relate the testing procedure for combinational circuit and PLA.',
         'CO4': 'Make use of PLD to construct the synchronous circuit design.',
         'CO5': 'Design and use programming tools for implementing digital circuits.',
     }
-    # Override with any detected CO descriptions
+    co_statements = {**_default_co, **subject_info.get('co_statements', {})}
     add_co_table(doc, co_statements)
 
     # Summary page
@@ -512,11 +512,16 @@ def build_question_bank(all_questions, subject_info, sources, output_path):
     doc.add_page_break()
     add_section_heading(doc, 'Part A – Short Answer Questions (2 Marks Each)', level=1)
 
+    # Build unit name resolver: prefer detected topics, fallback to UNIT_NAMES constants
+    _detected_topics = subject_info.get('unit_topics', {})
+    def get_unit_name(unit_no):
+        return _detected_topics.get(str(unit_no)) or UNIT_NAMES.get(str(unit_no), f'Unit {unit_no}')
+
     sa_qs = [q for q in all_questions if q.type == 'SA']
     for unit_no in ['1','2','3','4','5']:
         unit_qs = [q for q in sa_qs if str(q.unit) == unit_no]
         if not unit_qs: continue
-        add_section_heading(doc, UNIT_NAMES.get(unit_no, f'Unit {unit_no}'), level=2)
+        add_section_heading(doc, get_unit_name(unit_no), level=2)
         table = make_question_table(doc)
         for idx, q in enumerate(unit_qs, 1):
             add_question_row(table, q, idx, show_options=False)
@@ -530,7 +535,7 @@ def build_question_bank(all_questions, subject_info, sources, output_path):
     for unit_no in ['1','2','3','4','5']:
         unit_qs = [q for q in mcq_qs if str(q.unit) == unit_no]
         if not unit_qs: continue
-        add_section_heading(doc, UNIT_NAMES.get(unit_no, f'Unit {unit_no}'), level=2)
+        add_section_heading(doc, get_unit_name(unit_no), level=2)
         table = make_question_table(doc)
         for idx, q in enumerate(unit_qs, 1):
             add_question_row(table, q, idx, show_options=True)
@@ -544,7 +549,7 @@ def build_question_bank(all_questions, subject_info, sources, output_path):
     for unit_no in ['1','2','3','4','5']:
         unit_qs = [q for q in pb_qs if str(q.unit) == unit_no]
         if not unit_qs: continue
-        add_section_heading(doc, UNIT_NAMES.get(unit_no, f'Unit {unit_no}'), level=2)
+        add_section_heading(doc, get_unit_name(unit_no), level=2)
         table = make_question_table(doc)
         for idx, q in enumerate(unit_qs, 1):
             add_question_row(table, q, idx, show_options=False)
