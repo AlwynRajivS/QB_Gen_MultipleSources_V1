@@ -347,11 +347,11 @@ table.qb td img{max-width:200px;max-height:130px;border-radius:5px;margin:4px 0;
 // ═══════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════
-const UN_DEFAULT={1:'Sequential Circuit Design',2:'Asynchronous Sequential Circuit Design',3:'Testing',4:'PLD Design',5:'Digital Systems & Programming Tools'};
+const UN_DEFAULT={'1':'Sequential Circuit Design','2':'Asynchronous Sequential Circuit Design','3':'Testing','4':'PLD Design','5':'Digital Systems & Programming Tools'};
 // Pre-populate unit topics with defaults so they always show
-const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{1:UN_DEFAULT[1],2:UN_DEFAULT[2],3:UN_DEFAULT[3],4:UN_DEFAULT[4],5:UN_DEFAULT[5]}}};
+const DB={questions:[],files:{ct:[],es:[],aqa:[]},sub:{subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{'1':UN_DEFAULT['1'],'2':UN_DEFAULT['2'],'3':UN_DEFAULT['3'],'4':UN_DEFAULT['4'],'5':UN_DEFAULT['5']}}};
 let mImgs=[];
-function getUN(u){return DB.sub.unit_topics[String(u)]||UN_DEFAULT[u]||'Unit '+u;}
+function getUN(u){const k=String(u);return DB.sub.unit_topics[k]||UN_DEFAULT[k]||'Unit '+k;}
 const COU={'CO1':'1','CO2':'2','CO3':'3','CO4':'4','CO5':'5'};
 
 // ═══════════════════════════════════════
@@ -391,7 +391,7 @@ function clearAll(){
   if(DB.questions.length>0&&!confirm('This will also clear all '+DB.questions.length+' parsed questions. Continue?'))return;
   DB.files={ct:[],es:[],aqa:[]};
   DB.questions=[];
-  DB.sub={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{1:UN_DEFAULT[1],2:UN_DEFAULT[2],3:UN_DEFAULT[3],4:UN_DEFAULT[4],5:UN_DEFAULT[5]}};
+  DB.sub={subject:'',code:'',dept:'ECE',semester:'',co_statements:{},unit_topics:{'1':UN_DEFAULT['1'],'2':UN_DEFAULT['2'],'3':UN_DEFAULT['3'],'4':UN_DEFAULT['4'],'5':UN_DEFAULT['5']}};
   ['ct','es','aqa'].forEach(c=>{renderChips(c);document.getElementById('pb-'+c).style.display='none'});
   document.getElementById('log-wrap').style.display='none';
   document.getElementById('btn-gw').disabled=true;
@@ -445,7 +445,21 @@ function getCellParas(tc){
       if(c.localName==='p'){
         let text='';
         const rids=[];
-        function wt(n){for(const x of n.childNodes){if(x.localName==='t')text+=x.textContent||'';else if(x.localName==='blip'){const rid=x.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed')||x.getAttribute('r:embed')||x.getAttribute('embed')||'';if(rid)rids.push(rid);}else if(x.localName==='imagedata'){const rid=x.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id')||x.getAttribute('r:id')||'';if(rid)rids.push(rid);}else wt(x);}}
+        const NS_R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        function wt(n){
+          for(const x of n.childNodes){
+            if(x.localName==='t') text+=x.textContent||'';
+            else if(x.localName==='blip'){
+              const rid=x.getAttributeNS(NS_R,'embed')||x.getAttribute('r:embed')||x.getAttribute('embed')||'';
+              if(rid)rids.push(rid);
+            }
+            else if(x.localName==='imagedata'){
+              const rid=x.getAttributeNS(NS_R,'id')||x.getAttribute('r:id')||'';
+              if(rid)rids.push(rid);
+            }
+            else wt(x);
+          }
+        }
         wt(c);
         result.push({text:text.trim(),rids});
       }else walk(c);
@@ -457,13 +471,12 @@ function getCellParas(tc){
 
 function getCellText(tc){return getCellParas(tc).map(p=>p.text).filter(Boolean).join('\n')}
 
-// Returns objects with {dataUrl, mime, b64} for word embedding
+// Returns {dataUrl, mime, b64} objects — scans ALL nodes including nested runs
 function getCellImgObjs(tc,rm,im){
   const imgs=[];const seen=new Set();
   const NS_R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   function walk(node){
     for(const c of node.childNodes){
-      if(c.localName==='tbl')continue;
       if(c.localName==='blip'){
         const rid=c.getAttributeNS(NS_R,'embed')||c.getAttribute('r:embed')||c.getAttribute('embed')||'';
         if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}
@@ -472,10 +485,17 @@ function getCellImgObjs(tc,rm,im){
         const rid=c.getAttributeNS(NS_R,'id')||c.getAttribute('r:id')||'';
         if(rid){const fn=rm[rid];if(fn&&im[fn]&&!seen.has(fn)){seen.add(fn);imgs.push(im[fn]);}}
       }
+      // Also scan v:shape / v:imagedata paths
+      else if(c.localName==='shape'||c.localName==='pict'){walk(c);}
       else walk(c);
     }
   }
   walk(tc);return imgs;
+}
+
+// Check if cell has embedded images (even without text)
+function cellHasImages(tc,rm,im){
+  return getCellImgObjs(tc,rm,im).length>0;
 }
 
 function exCoBtl(txt){
@@ -484,9 +504,10 @@ function exCoBtl(txt){
 }
 
 function isHdr(t){
-  if(!t||t.trim().length<3)return true;
+  if(!t||t.trim().length<2)return true;
   const s=t.trim();
-  return/^(Part\s*[A-C]|PART\s*[–\-][AB]|\(OR\)|Answer ALL|Unit\s*-?\s*[1-5]\b|CO,?\s*BTL|Q\.\s*No\.|UNIT-\d|Syllabus:|Short Qu|Multiple Ch|Hyperlinks|Questions|^(I|II|III|M|E|D|Mark|Level|Portion|CO|BTL|K Level)$)/i.test(s);
+  // Only skip clearly header rows — NOT empty text (could be image-only question)
+  return/^(Part\s*[A-C]|PART\s*[–\-][AB]|\(OR\)|Answer ALL|Unit\s*-?\s*[1-5]\b|CO,?\s*BTL|Q\.\s*No\.|UNIT-\d|Syllabus:|Short Qu|Multiple Ch|Hyperlinks|^(I{1,3}|IV|V{1,2}|M|E|D|Mark|Level|Portion|CO|BTL|K\s*Level|K-Level)$)/i.test(s);
 }
 
 function parseMCQ(paras){
@@ -508,10 +529,31 @@ function parseMCQ(paras){
   return{qText:[q0,...rest].join('\n').trim(),opts:[]};
 }
 
-function detectType(marks,paras){
-  if(marks>=8)return'PARTB';
+// Parse marks from cell text — returns 0 if not a valid marks value (2, 8, 10, 13, 16, 20)
+function parseMarks(txt){
+  if(!txt||!txt.trim())return 0;
+  const m1=txt.match(/(\d+)\s*[Mm]ark/);if(m1)return parseInt(m1[1]);
+  const m2=txt.trim().match(/^(\d{1,2})$/);
+  if(m2){
+    const n=parseInt(m2[1]);
+    if([1,2,3,4,5,6,7,8,10,12,13,15,16,20,25].includes(n))return n;
+  }
+  return 0;
+}
+
+// Marks-first classification — curSec only breaks ties when marks=0/ambiguous
+function classifyQuestion(marks,paras,hasImages,curSec){
+  if(marks>=8) return 'PARTB';
+  if(marks===2||marks===1){
+    const{opts}=parseMCQ(paras);
+    if(opts.length>=3) return 'MCQ';
+    return 'SA';
+  }
+  // marks===0 → fall back to section context
+  if(curSec==='PARTB') return 'PARTB';
   const{opts}=parseMCQ(paras);
-  return opts.length>=3?'MCQ':'SA';
+  if(opts.length>=3) return 'MCQ';
+  return 'SA';
 }
 
 // ─── IMPROVED: broader subject/title detection ───────────────────────────────
@@ -556,9 +598,9 @@ function detectSubject(xmlDoc){
     if(inl){const key='CO'+inl[1];if(!info.co_statements[key])info.co_statements[key]=inl[2].trim();}
     // Unit topic
     const syl=t.match(/Syllabus:\s*Unit\s*[-–]?\s*([1-5])\s+(.+)/i);
-    if(syl&&!info.unit_topics[syl[1]])info.unit_topics[syl[1]]=syl[2].trim();
+    if(syl&&!info.unit_topics[syl[1]])info.unit_topics[String(syl[1])]=syl[2].trim();
     const utop=t.match(/^Unit\s*[-–]?\s*([1-5])\s*[:\-–|]\s*(.+)/i);
-    if(utop&&!info.unit_topics[utop[1]])info.unit_topics[utop[1]]=utop[2].trim();
+    if(utop&&!info.unit_topics[String(utop[1])])info.unit_topics[String(utop[1])]=utop[2].trim();
   }
 
   // Bare CO label + next non-empty line = statement
@@ -665,42 +707,56 @@ async function parseDocx(file,source){
           const mrkTxt=getCellText(cells[3]);
           const{co,btl}=exCoBtl(coTxt);
           if(!co)continue;
-          const marks=parseInt((mrkTxt.match(/\d+/)||['2'])[0])||2;
+          // Marks: parse explicitly, default 2 for short-answer tables
+          const marks=parseMarks(mrkTxt)||2;
           const paras=getCellParas(cells[2]);
-          const qFirst=paras[0]?.text||'';
-          if(isHdr(qFirst)||qFirst.length<5)continue;
           const imgObjs=[...getCellImgObjs(cells[2],rm,im),...getCellImgObjs(cells[1],rm,im)];
+          const hasImages=imgObjs.length>0;
+          const qFirst=paras[0]?.text||'';
+          // Skip if no text AND no images — truly empty cell
+          if(!hasImages&&(isHdr(qFirst)||qFirst.length<4))continue;
           const unit=COU[co]||'1';
-          const qType=detectType(marks,paras);
+          const qType=classifyQuestion(marks,paras,hasImages,curSec);
           let qText='',opts=[];
           if(qType==='MCQ'){const r=parseMCQ(paras);qText=r.qText;opts=r.opts;}
           else qText=paras.map(p=>p.text).filter(Boolean).join('\n');
-          if(!qText.trim())continue;
+          // Allow image-only questions (qText can be empty if images present)
+          if(!qText.trim()&&!hasImages)continue;
           qs.push({id:source+'_'+Date.now()+'_'+(qCnt++),type:qType,unit,co,btl:btl||'K2',marks,qno:qnoTxt||String(qCnt),text:qText.trim(),options:opts,correct:'',images:imgObjs.map(o=>o.dataUrl),_imgObjs:imgObjs,source,filename:file.name,subject:subInfo.subject});
         }
         else if(layout==='7col'&&cells.length>=5){
           const qnoTxt=getCellText(cells[0]);
           const coTxt=getCellText(cells[1]);
           const kTxt=getCellText(cells[2]);
-          const mrkTxt=getCellText(cells[4]||cells[cells.length-1]);
+          // Marks column: try col 4, then last col
+          const mrkCell=cells[4]||cells[cells.length-1];
+          const mrkTxt=getCellText(mrkCell);
           const{co}=exCoBtl(coTxt);
           if(!co)continue;
           const km=kTxt.match(/K\s*([1-6])/i);
           const btl=km?'K'+km[1]:'K2';
-          const marks=parseInt((mrkTxt.match(/\d+/)||['2'])[0])||2;
+          // Try each remaining cell for marks — pick first valid parse
+          let marks=0;
+          for(let ci=4;ci<cells.length&&!marks;ci++){marks=parseMarks(getCellText(cells[ci]));}
+          if(!marks)marks=parseMarks(mrkTxt);
+          if(!marks)marks=2; // default to 2 for ambiguous rows
           const paras=getCellParas(cells[3]);
+          const imgObjs=getCellImgObjs(cells[3],rm,im);
+          const hasImages=imgObjs.length>0;
           const qFirst=paras[0]?.text||'';
           const allQtxt=paras.map(p=>p.text).join(' ');
+          // Update section context from question text markers
           if(/PART[\s–\-]*B/i.test(allQtxt))curSec='PARTB';
           if(/MCQ|Multiple.?Choice/i.test(allQtxt))curSec='MCQ';
-          if(isHdr(qFirst)||qFirst.length<5)continue;
-          const imgObjs=getCellImgObjs(cells[3],rm,im);
+          // Skip truly empty rows
+          if(!hasImages&&(isHdr(qFirst)||qFirst.length<4))continue;
           const unit=COU[co]||'1';
-          let qType,qText='',opts=[];
-          if(marks>=8||curSec==='PARTB'){qType='PARTB';qText=paras.map(p=>p.text).filter(Boolean).join('\n');}
-          else if(curSec==='MCQ'){const r=parseMCQ(paras);qType=r.opts.length>=3?'MCQ':'SA';qText=r.qText;opts=r.opts;}
-          else{const r=parseMCQ(paras);qType=r.opts.length>=3?'MCQ':'SA';if(qType==='MCQ'){qText=r.qText;opts=r.opts;}else qText=paras.map(p=>p.text).filter(Boolean).join('\n');}
-          if(!qText.trim())continue;
+          // MARKS-FIRST classification — section context only when marks=0/ambiguous
+          const qType=classifyQuestion(marks,paras,hasImages,curSec);
+          let qText='',opts=[];
+          if(qType==='MCQ'){const r=parseMCQ(paras);qText=r.qText;opts=r.opts;}
+          else qText=paras.map(p=>p.text).filter(Boolean).join('\n');
+          if(!qText.trim()&&!hasImages)continue;
           qs.push({id:source+'_'+Date.now()+'_'+(qCnt++),type:qType,unit,co,btl,marks,qno:qnoTxt||String(qCnt),text:qText.trim(),options:opts,correct:'',images:imgObjs.map(o=>o.dataUrl),_imgObjs:imgObjs,source,filename:file.name,subject:subInfo.subject});
         }
       }
@@ -740,12 +796,20 @@ async function processAll(){
         if(subInfo.dept&&subInfo.dept!=='ECE'&&!DB.sub.dept)DB.sub.dept=subInfo.dept;
         if(subInfo.semester&&!DB.sub.semester)DB.sub.semester=subInfo.semester;
         if(subInfo.co_statements){Object.entries(subInfo.co_statements).forEach(([k,v])=>{if(!DB.sub.co_statements[k])DB.sub.co_statements[k]=v;});}
-        if(subInfo.unit_topics){Object.entries(subInfo.unit_topics).forEach(([k,v])=>{if(!DB.sub.unit_topics[k])DB.sub.unit_topics[k]=v;});}
+        // Unit topics: detected values from doc OVERWRITE defaults (defaults are just placeholders)
+        if(subInfo.unit_topics){Object.entries(subInfo.unit_topics).forEach(([k,v])=>{if(v)DB.sub.unit_topics[String(k)]=v;});}
 
         let added=0;
         qs.forEach(q=>{
-          const key=q.co+'|'+q.text.slice(0,50).toLowerCase().trim();
-          if(!DB.questions.find(x=>(x.co+'|'+x.text.slice(0,50).toLowerCase().trim())===key)){DB.questions.push(q);added++;}
+          // Key: CO + text prefix + image count — prevents image-only questions all hashing to same key
+          const imgSig=q.images&&q.images.length?'|img'+q.images.length:'';
+          const textSig=q.text.slice(0,50).toLowerCase().trim();
+          const key=q.co+'|'+(textSig||q.qno||qCnt)+imgSig;
+          if(!DB.questions.find(x=>{
+            const xs=(x.images&&x.images.length?'|img'+x.images.length:'');
+            const xt=x.text.slice(0,50).toLowerCase().trim();
+            return (x.co+'|'+(xt||x.qno)+xs)===key;
+          })){DB.questions.push(q);added++;}
         });
         totalNew+=added;
         const withImgs=qs.filter(q=>q.images&&q.images.length>0).length;
@@ -771,6 +835,20 @@ async function processAll(){
   toast('Processed! '+DB.questions.length+' questions ('+totalNew+' new)','ok');
 }
 
+function refreshUnitSelects(){
+  // All selects that have unit 1-5 options
+  const allSelIds=['mf-unit','fsa-u','fmcq-u','fpb-u','ef-u'];
+  allSelIds.forEach(id=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    [...sel.options].forEach(opt=>{
+      if(!opt.value)return; // "All Units" option
+      if(/^[1-5]$/.test(opt.value)){
+        opt.text='Unit '+opt.value+' \u2013 '+getUN(opt.value);
+      }
+    });
+  });
+}
+
 function renderCoStmtFields(){
   const wrap=document.getElementById('co-stmt-grid');if(!wrap)return;
   wrap.innerHTML='';
@@ -786,10 +864,10 @@ function renderUnitTopicFields(){
   const wrap=document.getElementById('unit-topic-grid');if(!wrap)return;
   wrap.innerHTML='';
   for(let n=1;n<=5;n++){
-    const val=DB.sub.unit_topics[String(n)]||'';
-    const def=UN_DEFAULT[n]||'';
+    const k=String(n);
+    const val=DB.sub.unit_topics[k]||UN_DEFAULT[k]||'';
     const row=document.createElement('div');row.className='fi full';
-    row.innerHTML='<label>Unit '+n+' Topic</label><input type="text" id="ut-'+n+'" value="'+escAttr(val)+'" placeholder="'+def+'" oninput="DB.sub.unit_topics[\''+n+'\']=this.value;renderAll()">';
+    row.innerHTML='<label>Unit '+n+' Topic</label><input type="text" id="ut-'+n+'" value="'+escAttr(val)+'" placeholder="Enter unit '+n+' topic title..." oninput="DB.sub.unit_topics[\''+k+'\']=this.value;renderAll()">';
     wrap.appendChild(row);
   }
 }
@@ -800,12 +878,13 @@ function updateSubjectFields(info){
   document.getElementById('sub-sem').value=info.semester||'';
   renderCoStmtFields();
   renderUnitTopicFields();
+  refreshUnitSelects();
 }
 
 // ═══════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════
-function renderAll(){renderSec('SA');renderSec('MCQ');renderSec('PARTB');renderDash();updateCounts();}
+function renderAll(){renderSec('SA');renderSec('MCQ');renderSec('PARTB');renderDash();updateCounts();refreshUnitSelects();}
 
 function getFiltered(type){
   const uid={'SA':'fsa-u','MCQ':'fmcq-u','PARTB':'fpb-u'}[type];
@@ -1143,10 +1222,15 @@ function importJSON(){
       if(!data.questions||!Array.isArray(data.questions)){toast('Invalid JSON format','err');return;}
       let added=0;
       data.questions.forEach(q=>{
-        const key=(q.co||'')+'|'+(q.text||'').slice(0,50).toLowerCase().trim();
-        if(!DB.questions.find(x=>(x.co+'|'+x.text.slice(0,50).toLowerCase().trim())===key)){
+        const imgSig=q.images&&q.images.length?'|img'+q.images.length:'';
+        const textSig=(q.text||'').slice(0,50).toLowerCase().trim();
+        const key=(q.co||'')+'|'+(textSig||q.qno||'x')+imgSig;
+        if(!DB.questions.find(x=>{
+          const xs=x.images&&x.images.length?'|img'+x.images.length:'';
+          const xt=x.text.slice(0,50).toLowerCase().trim();
+          return (x.co+'|'+(xt||x.qno||'x')+xs)===key;
+        })){
           if(!q.id)q.id='imp_'+Date.now()+'_'+Math.random().toString(36).slice(2);
-          // Rebuild _imgObjs from images array
           if(q.images&&q.images.length){
             q._imgObjs=q.images.map(dataUrl=>{const m=dataUrl.match(/^data:([^;]+);base64,(.+)$/);return m?{dataUrl,mime:m[1],b64:m[2]}:null;}).filter(Boolean);
           }
@@ -1158,8 +1242,9 @@ function importJSON(){
         if(data.course.code&&!DB.sub.code)DB.sub.code=data.course.code;
         if(data.course.dept)DB.sub.dept=data.course.dept;
         if(data.course.semester)DB.sub.semester=data.course.semester;
-        if(data.course.co_statements)Object.entries(data.course.co_statements).forEach(([k,v])=>{if(!DB.sub.co_statements[k])DB.sub.co_statements[k]=v;});
-        if(data.course.unit_topics)Object.entries(data.course.unit_topics).forEach(([k,v])=>{if(!DB.sub.unit_topics[k])DB.sub.unit_topics[k]=v;});
+        if(data.course.co_statements)Object.entries(data.course.co_statements).forEach(([k,v])=>{if(v)DB.sub.co_statements[k]=v;});
+        // Unit topics from JSON overwrite defaults
+        if(data.course.unit_topics)Object.entries(data.course.unit_topics).forEach(([k,v])=>{if(v)DB.sub.unit_topics[String(k)]=v;});
         updateSubjectFields(DB.sub);
       }
       document.getElementById('btn-gw').disabled=false;
@@ -1208,6 +1293,7 @@ document.addEventListener('keydown',e=>{
   // Render unit topic fields on page load so defaults are visible
   renderUnitTopicFields();
   renderCoStmtFields();
+  refreshUnitSelects();
   setTimeout(()=>toast('Upload .docx files to begin! | Ctrl+S = Save JSON | Ctrl+D = Dup Check',''),900);
 })();
 </script>
